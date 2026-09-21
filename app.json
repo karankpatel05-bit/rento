@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Rento - Property & Rent Tracker",
+    "slug": "rento",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.landlord.rento"
+    },
+    "android": {
+      "package": "com.landlord.rento",
+      "adaptiveIcon": {
+        "backgroundColor": "#ECFDF5",
+        "foregroundImage": "./assets/icon.png"
+      },
+      "permissions": [
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#059669"
+        }
+      ]
+    ]
+  }
+}
