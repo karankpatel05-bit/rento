@@ -11,13 +11,17 @@ interface AppContextType {
   isLoading: boolean;
   selectedTenantId: string | null;
   setSelectedTenantId: (id: string | null) => void;
-  addTenant: (tenant: Omit<Tenant, 'id' | 'createdAt'>) => Promise<void>;
+  addTenant: (
+    tenant: Omit<Tenant, 'id' | 'createdAt'>,
+    historicalPayments?: Omit<PaymentRecord, 'id' | 'createdAt' | 'tenantId'>[]
+  ) => Promise<void>;
   updateTenant: (tenant: Tenant) => Promise<void>;
   deleteTenant: (id: string) => Promise<void>;
   logPayment: (payment: Omit<PaymentRecord, 'id' | 'createdAt'>) => Promise<void>;
+  batchLogPayments: (payments: Omit<PaymentRecord, 'id' | 'createdAt'>[]) => Promise<void>;
   recordInterestCollection: (record: Omit<InterestCollectionRecord, 'id'>) => Promise<void>;
   triggerTestMayNotification: (tenant: Tenant) => Promise<void>;
-  resetDemoData: () => Promise<void>;
+  clearAllData: () => Promise<void>;
   refreshData: () => Promise<void>;
 }
 
@@ -53,14 +57,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     NotificationService.requestPermissionsAsync();
   }, []);
 
-  const addTenant = async (tenantData: Omit<Tenant, 'id' | 'createdAt'>) => {
+  const addTenant = async (
+    tenantData: Omit<Tenant, 'id' | 'createdAt'>,
+    historicalPayments?: Omit<PaymentRecord, 'id' | 'createdAt' | 'tenantId'>[]
+  ) => {
+    const tenantId = `t-${Date.now()}`;
     const newTenant: Tenant = {
       ...tenantData,
-      id: `t-${Date.now()}`,
+      id: tenantId,
       createdAt: new Date().toISOString(),
     };
     await StorageService.saveTenant(newTenant);
     await NotificationService.scheduleMayDepositReminder(newTenant);
+
+    if (historicalPayments && historicalPayments.length > 0) {
+      const recordsToSave: PaymentRecord[] = historicalPayments.map((p, idx) => ({
+        ...p,
+        id: `p-${Date.now()}-${idx}`,
+        tenantId,
+        createdAt: new Date().toISOString(),
+      }));
+      await StorageService.saveMultiplePayments(recordsToSave);
+    }
+
     await loadAll();
   };
 
@@ -88,6 +107,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await loadAll();
   };
 
+  const batchLogPayments = async (paymentsData: Omit<PaymentRecord, 'id' | 'createdAt'>[]) => {
+    if (paymentsData.length === 0) return;
+    const recordsToSave: PaymentRecord[] = paymentsData.map((p, idx) => ({
+      ...p,
+      id: `p-${Date.now()}-${idx}`,
+      createdAt: new Date().toISOString(),
+    }));
+    await StorageService.saveMultiplePayments(recordsToSave);
+    await loadAll();
+  };
+
   const recordInterestCollection = async (recordData: Omit<InterestCollectionRecord, 'id'>) => {
     const record: InterestCollectionRecord = {
       ...recordData,
@@ -101,8 +131,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await NotificationService.triggerTestReminder(tenant);
   };
 
-  const resetDemoData = async () => {
-    await StorageService.resetToSeedData();
+  const clearAllData = async () => {
+    await StorageService.clearAllData();
     await loadAll();
   };
 
@@ -144,9 +174,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateTenant,
         deleteTenant,
         logPayment,
+        batchLogPayments,
         recordInterestCollection,
         triggerTestMayNotification,
-        resetDemoData,
+        clearAllData,
         refreshData: loadAll,
       }}
     >

@@ -8,7 +8,11 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.landlord.rento"
+      "bundleIdentifier": "com.landlord.rento",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Rento requires camera access to scan your physical notebook rent records.",
+        "NSPhotoLibraryUsageDescription": "Rento requires photo library access to upload ledger images."
+      }
     },
     "android": {
       "package": "com.landlord.rento",
@@ -17,6 +21,9 @@
         "foregroundImage": "./assets/icon.png"
       },
       "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.POST_NOTIFICATIONS"
@@ -28,6 +35,13 @@
         {
           "icon": "./assets/icon.png",
           "color": "#059669"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Rento requires camera access to scan your physical notebook rent records.",
+          "photosPermission": "Rento requires photo library access to upload ledger images."
         }
       ]
     ]

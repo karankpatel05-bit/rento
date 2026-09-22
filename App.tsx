@@ -9,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import * as ImagePicker from 'expo-image-picker';
 import { Building2, Bell, ShieldCheck } from 'lucide-react-native';
 import { AppProvider, useApp } from './src/context/AppContext';
 import { Header } from './src/components/common/Header';
@@ -23,6 +24,17 @@ function MainApp() {
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
 
   const pendingAlertsCount = alerts.filter((a) => !a.isResolved).length;
+
+  // Prompt for Camera permission immediately on app startup
+  useEffect(() => {
+    (async () => {
+      try {
+        await ImagePicker.requestCameraPermissionsAsync();
+      } catch (err) {
+        console.warn('Camera permission request on app startup:', err);
+      }
+    })();
+  }, []);
 
   // Listen for user tapping a scheduled or test push notification
   useEffect(() => {

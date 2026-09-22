@@ -1,5 +1,7 @@
 export type MaintenanceWorkflow = 'standard' | 'variable_rent_deduction';
 
+export type PaymentMode = 'UPI' | 'NEFT' | 'Cash';
+
 export interface RentIncrementCondition {
   type: 'percentage' | 'fixed';
   value: number; // e.g., 5 for 5%, or 1000 for ₹1000
@@ -28,12 +30,13 @@ export interface PaymentRecord {
   id: string;
   tenantId: string;
   monthYear: string; // e.g. "May 2026"
-  paymentDate: string; // ISO string
+  paymentDate: string; // YYYY-MM-DD
   expectedRent: number;
   isMaintenanceDeducted: boolean;
   maintenanceDeductionAmount: number;
   netPayoutReceived: number; // expectedRent - maintenanceDeductionAmount
   amountPaid: number;
+  paymentMode: PaymentMode; // Strictly 'UPI' | 'NEFT' | 'Cash'
   remarks: string;
   status: 'paid' | 'partial' | 'pending';
   createdAt: string;
@@ -60,4 +63,15 @@ export interface AppAlert {
   year: number;
   isResolved: boolean;
   resolvedAt?: string;
+}
+
+export interface ExtractedLedgerRow {
+  id: string;
+  date: string; // formatted YYYY-MM-DD
+  monthYear: string; // e.g. "May 2025"
+  amount: number;
+  paymentMode: PaymentMode;
+  remarks: string;
+  rawText: string;
+  confidence: number;
 }

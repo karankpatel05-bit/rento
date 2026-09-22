@@ -19,9 +19,12 @@ import {
   TrendingUp,
   Wrench,
   Check,
+  Camera,
+  FileSpreadsheet,
 } from 'lucide-react-native';
-import { MaintenanceWorkflow, Tenant } from '../../types';
+import { MaintenanceWorkflow, Tenant, PaymentRecord } from '../../types';
 import { useApp } from '../../context/AppContext';
+import { LedgerScannerModal } from '../ocr/LedgerScannerModal';
 
 interface TenantOnboardingModalProps {
   visible: boolean;
@@ -41,13 +44,17 @@ export const TenantOnboardingModal: React.FC<TenantOnboardingModalProps> = ({
   const [unitDesignation, setUnitDesignation] = useState<string>('');
   const [rentAmount, setRentAmount] = useState<string>('');
   const [incrementType, setIncrementType] = useState<'percentage' | 'fixed'>('percentage');
-  const [incrementValue, setIncrementValue] = useState<string>('5');
-  const [incrementNotes, setIncrementNotes] = useState<string>('5% annual escalation');
-  const [electricityLoad, setElectricityLoad] = useState<string>('5 kW Three-Phase');
-  const [electricityDeposit, setElectricityDeposit] = useState<string>('25000');
+  const [incrementValue, setIncrementValue] = useState<string>('');
+  const [incrementNotes, setIncrementNotes] = useState<string>('');
+  const [electricityLoad, setElectricityLoad] = useState<string>('');
+  const [electricityDeposit, setElectricityDeposit] = useState<string>('');
   const [maintenanceWorkflow, setMaintenanceWorkflow] = useState<MaintenanceWorkflow>(
     'variable_rent_deduction'
   );
+  const [historicalPayments, setHistoricalPayments] = useState<
+    Omit<PaymentRecord, 'id' | 'createdAt' | 'tenantId'>[]
+  >([]);
+  const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const handleResetAndClose = () => {
@@ -57,10 +64,13 @@ export const TenantOnboardingModal: React.FC<TenantOnboardingModalProps> = ({
     setPropertyAddress('');
     setUnitDesignation('');
     setRentAmount('');
-    setIncrementValue('5');
-    setElectricityLoad('5 kW Three-Phase');
-    setElectricityDeposit('25000');
+    setIncrementValue('');
+    setIncrementNotes('');
+    setElectricityLoad('');
+    setElectricityDeposit('');
     setMaintenanceWorkflow('variable_rent_deduction');
+    setHistoricalPayments([]);
+    setIsScannerOpen(false);
     onClose();
   };
 
@@ -72,23 +82,26 @@ export const TenantOnboardingModal: React.FC<TenantOnboardingModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      await addTenant({
-        name: name.trim(),
-        phone: phone.trim() || '+91 90000 00000',
-        propertyAddress: propertyAddress.trim(),
-        unitDesignation: unitDesignation.trim() || 'Unit 1',
-        rentAmount: parseFloat(rentAmount) || 0,
-        rentIncrement: {
-          type: incrementType,
-          value: parseFloat(incrementValue) || 0,
-          notes: incrementNotes,
+      await addTenant(
+        {
+          name: name.trim(),
+          phone: phone.trim() || '+91 90000 00000',
+          propertyAddress: propertyAddress.trim(),
+          unitDesignation: unitDesignation.trim() || 'Unit 1',
+          rentAmount: parseFloat(rentAmount) || 0,
+          rentIncrement: {
+            type: incrementType,
+            value: parseFloat(incrementValue) || 0,
+            notes: incrementNotes,
+          },
+          electricityLoad: electricityLoad.trim(),
+          electricityDeposit: parseFloat(electricityDeposit) || 0,
+          maintenanceWorkflow,
+          leaseStartDate: new Date().toISOString().split('T')[0],
+          active: true,
         },
-        electricityLoad: electricityLoad.trim(),
-        electricityDeposit: parseFloat(electricityDeposit) || 0,
-        maintenanceWorkflow,
-        leaseStartDate: new Date().toISOString().split('T')[0],
-        active: true,
-      });
+        historicalPayments
+      );
       handleResetAndClose();
     } catch (err) {
       console.error(err);
@@ -192,6 +205,49 @@ export const TenantOnboardingModal: React.FC<TenantOnboardingModalProps> = ({
                       onChangeText={setRentAmount}
                     />
                   </View>
+                </View>
+
+                {/* Smart Notebook Ledger Import via Camera */}
+                <View style={styles.ocrSection}>
+                  <View style={styles.ocrHeaderRow}>
+                    <View style={styles.ocrTitleRow}>
+                      <Camera size={16} color="#059669" />
+                      <Text style={styles.ocrSectionTitle}>Physical Ledger Records</Text>
+                    </View>
+                    {historicalPayments.length > 0 && (
+                      <View style={styles.scannedBadge}>
+                        <Check size={12} color="#047857" />
+                        <Text style={styles.scannedBadgeText}>
+                          {historicalPayments.length} records ready
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.ocrSectionDesc}>
+                    Digitize past rent entries from physical notebooks instantly with camera pattern recognition.
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.scanPastRecordsBtn,
+                      historicalPayments.length > 0 && styles.scanPastRecordsBtnActive,
+                    ]}
+                    onPress={() => setIsScannerOpen(true)}
+                  >
+                    <Camera
+                      size={16}
+                      color={historicalPayments.length > 0 ? '#047857' : '#059669'}
+                    />
+                    <Text
+                      style={[
+                        styles.scanPastRecordsText,
+                        historicalPayments.length > 0 && styles.scanPastRecordsTextActive,
+                      ]}
+                    >
+                      {historicalPayments.length > 0
+                        ? `Edit Scanned Records (${historicalPayments.length})`
+                        : 'Scan Past Records (Camera / OCR)'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             ) : (
@@ -387,6 +443,16 @@ export const TenantOnboardingModal: React.FC<TenantOnboardingModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Ledger Scanner Modal for Headerless Physical Notebook OCR */}
+      <LedgerScannerModal
+        visible={isScannerOpen}
+        rentAmount={parseFloat(rentAmount) || 0}
+        onClose={() => setIsScannerOpen(false)}
+        onConfirmImport={(records) => {
+          setHistoricalPayments(records);
+        }}
+      />
     </Modal>
   );
 };
@@ -608,5 +674,73 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  ocrSection: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1.5,
+    borderColor: '#BBF7D0',
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 6,
+    marginBottom: 14,
+  },
+  ocrHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  ocrTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  ocrSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#166534',
+  },
+  scannedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  scannedBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#15803D',
+  },
+  ocrSectionDesc: {
+    fontSize: 11,
+    color: '#166534',
+    lineHeight: 15,
+    marginBottom: 10,
+  },
+  scanPastRecordsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#059669',
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  scanPastRecordsBtnActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#10B981',
+  },
+  scanPastRecordsText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  scanPastRecordsTextActive: {
+    color: '#047857',
   },
 });

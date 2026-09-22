@@ -66,9 +66,13 @@ export const AlertsScreen: React.FC<AlertsScreenProps> = ({ onSelectTenant }) =>
         {pendingAlerts.length === 0 ? (
           <View style={styles.allDoneCard}>
             <CheckCircle2 size={32} color="#059669" />
-            <Text style={styles.allDoneTitle}>All May Rebates Collected!</Text>
+            <Text style={styles.allDoneTitle}>
+              {tenants.length === 0 ? 'No Active Reminders' : 'All May Rebates Collected!'}
+            </Text>
             <Text style={styles.allDoneSub}>
-              All electricity deposit interests for this cycle have been logged and reconciled.
+              {tenants.length === 0
+                ? 'When you register tenants with an electricity deposit, annual May 1st rebate alerts will appear here.'
+                : 'All electricity deposit interests for this cycle have been logged and reconciled.'}
             </Text>
           </View>
         ) : (

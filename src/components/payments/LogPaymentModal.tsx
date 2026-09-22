@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { X, CheckCircle, Calculator, Wrench, IndianRupee } from 'lucide-react-native';
-import { Tenant } from '../../types';
+import { Tenant, PaymentMode } from '../../types';
 import { useApp } from '../../context/AppContext';
 
 interface LogPaymentModalProps {
@@ -28,10 +28,14 @@ export const LogPaymentModal: React.FC<LogPaymentModalProps> = ({
 }) => {
   const { logPayment } = useApp();
 
-  const [monthYear, setMonthYear] = useState<string>('September 2026');
+  const now = new Date();
+  const currentMonthYear = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+  const [monthYear, setMonthYear] = useState<string>(currentMonthYear);
   const [paymentDate, setPaymentDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
+    now.toISOString().split('T')[0]
   );
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('UPI');
   const [isMaintenanceDeducted, setIsMaintenanceDeducted] = useState<boolean>(
     tenant.maintenanceWorkflow === 'variable_rent_deduction'
   );
@@ -70,6 +74,7 @@ export const LogPaymentModal: React.FC<LogPaymentModalProps> = ({
         maintenanceDeductionAmount: isMaintenanceDeducted ? numDeduction : 0,
         netPayoutReceived: netExpectedPayout,
         amountPaid: paid,
+        paymentMode,
         remarks: remarks.trim() || (isMaintenanceDeducted ? `Variable maintenance ₹${numDeduction} deducted` : 'Regular rent received'),
         status: paid >= netExpectedPayout ? 'paid' : 'partial',
       });
@@ -212,6 +217,36 @@ export const LogPaymentModal: React.FC<LogPaymentModalProps> = ({
                   value={amountPaid}
                   onChangeText={setAmountPaid}
                 />
+              </View>
+            </View>
+
+            {/* Mode of Payment (Mandatory Selection: UPI, NEFT, or Cash) */}
+            <View style={styles.formGroup}>
+              <Text style={styles.inputLabel}>Mode of Payment *</Text>
+              <View style={styles.modeSelector}>
+                {(['UPI', 'NEFT', 'Cash'] as PaymentMode[]).map((mode) => (
+                  <TouchableOpacity
+                    key={mode}
+                    style={[
+                      styles.modeButton,
+                      paymentMode === mode && styles.modeButtonActive,
+                      paymentMode === mode && mode === 'UPI' && styles.modeButtonUPI,
+                      paymentMode === mode && mode === 'NEFT' && styles.modeButtonNEFT,
+                      paymentMode === mode && mode === 'Cash' && styles.modeButtonCash,
+                    ]}
+                    onPress={() => setPaymentMode(mode)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.modeButtonText,
+                        paymentMode === mode && styles.modeButtonTextActive,
+                      ]}
+                    >
+                      {mode}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
 
@@ -539,5 +574,46 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  modeSelector: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  modeButtonActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  modeButtonUPI: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#6366F1',
+  },
+  modeButtonNEFT: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#2563EB',
+  },
+  modeButtonCash: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#059669',
+  },
+  modeButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  modeButtonTextActive: {
+    fontWeight: '800',
+    color: '#0F172A',
   },
 });

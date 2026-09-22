@@ -237,8 +237,31 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
                 <View key={payment.id} style={styles.ledgerCard}>
                   {/* Ledger Card Top Row */}
                   <View style={styles.ledgerTopRow}>
-                    <View>
-                      <Text style={styles.ledgerMonth}>{payment.monthYear}</Text>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <View style={styles.monthModeRow}>
+                        <Text style={styles.ledgerMonth}>{payment.monthYear}</Text>
+                        {payment.paymentMode && (
+                          <View
+                            style={[
+                              styles.modeBadge,
+                              payment.paymentMode === 'UPI' && styles.modeBadgeUPI,
+                              payment.paymentMode === 'NEFT' && styles.modeBadgeNEFT,
+                              payment.paymentMode === 'Cash' && styles.modeBadgeCash,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.modeBadgeText,
+                                payment.paymentMode === 'UPI' && styles.modeBadgeTextUPI,
+                                payment.paymentMode === 'NEFT' && styles.modeBadgeTextNEFT,
+                                payment.paymentMode === 'Cash' && styles.modeBadgeTextCash,
+                              ]}
+                            >
+                              {payment.paymentMode}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
                       <View style={styles.dateRow}>
                         <Calendar size={12} color="#64748B" />
                         <Text style={styles.ledgerDate}>
@@ -825,5 +848,42 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
+  },
+  monthModeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  modeBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  modeBadgeUPI: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#C7D2FE',
+  },
+  modeBadgeNEFT: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  modeBadgeCash: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  modeBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  modeBadgeTextUPI: {
+    color: '#4338CA',
+  },
+  modeBadgeTextNEFT: {
+    color: '#1D4ED8',
+  },
+  modeBadgeTextCash: {
+    color: '#047857',
   },
 });

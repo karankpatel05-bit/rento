@@ -27,19 +27,12 @@ export const LogInterestModal: React.FC<LogInterestModalProps> = ({
   const { recordInterestCollection } = useApp();
   const currentYear = new Date().getFullYear();
 
-  // Estimate interest roughly around 6-7% standard state electricity board interest on deposit
-  const estimatedInterest = Math.round((tenant.electricityDeposit * 0.065) || 0);
-
   const [year, setYear] = useState<string>(currentYear.toString());
-  const [amountCollected, setAmountCollected] = useState<string>(
-    estimatedInterest > 0 ? estimatedInterest.toString() : ''
-  );
+  const [amountCollected, setAmountCollected] = useState<string>('');
   const [collectedDate, setCollectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
-  const [remarks, setRemarks] = useState<string>(
-    `Annual electricity rebate adjusted via ${currentYear} summer bill.`
-  );
+  const [remarks, setRemarks] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const handleSubmit = async () => {

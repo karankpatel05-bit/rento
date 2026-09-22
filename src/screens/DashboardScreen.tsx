@@ -36,7 +36,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const {
     tenants,
     payments,
-    resetDemoData,
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -204,11 +203,24 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         {/* Tenant Cards List */}
         {filteredTenants.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Building2 size={36} color="#94A3B8" />
-            <Text style={styles.emptyTitle}>No matching properties</Text>
-            <Text style={styles.emptySub}>
-              Try adjusting your search or add a new tenant profile.
+            <Building2 size={40} color="#CBD5E1" />
+            <Text style={styles.emptyTitle}>
+              {tenants.length === 0 ? 'No tenants or properties yet' : 'No matching properties'}
             </Text>
+            <Text style={styles.emptySub}>
+              {tenants.length === 0
+                ? 'Get started by onboarding your first tenant and setting up rent details.'
+                : 'Try adjusting your search filter or clear query.'}
+            </Text>
+            {tenants.length === 0 && (
+              <TouchableOpacity
+                style={styles.emptyAddBtn}
+                onPress={() => setIsOnboardingOpen(true)}
+              >
+                <Plus size={16} color="#FFFFFF" />
+                <Text style={styles.emptyAddBtnText}>Add Your First Tenant</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           filteredTenants.map((tenant) => (
@@ -220,15 +232,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             />
           ))
         )}
-
-        {/* Demo reset footer helper */}
-        <TouchableOpacity
-          style={styles.resetBtn}
-          onPress={resetDemoData}
-        >
-          <RotateCcw size={13} color="#94A3B8" />
-          <Text style={styles.resetBtnText}>Reset Demo Sample Data</Text>
-        </TouchableOpacity>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -428,16 +431,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
   },
-  resetBtn: {
+  emptyAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 6,
-    paddingVertical: 12,
+    backgroundColor: '#059669',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginTop: 16,
   },
-  resetBtnText: {
-    fontSize: 12,
-    color: '#94A3B8',
-    fontWeight: '500',
+  emptyAddBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
