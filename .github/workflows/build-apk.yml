@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build Standalone APK
+    name: Build Standalone Release APK
     runs-on: ubuntu-latest
 
     steps:
@@ -40,15 +40,15 @@ jobs:
       - name: 📱 Generate Native Android Project (Expo Prebuild)
         run: npx expo prebuild --platform android --clean
 
-      - name: 🛠 Build Android APK
+      - name: 🛠 Build Standalone Android Release APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
 
       - name: 📤 Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rento-mobile-apk
-          path: android/app/build/outputs/apk/**/*.apk
+          name: rento-release-apk
+          path: android/app/build/outputs/apk/release/*.apk
           retention-days: 14
