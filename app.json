@@ -10,16 +10,10 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/YOUR-PROJECT-ID",
       "fallbackToCacheTimeout": 0,
       "checkAutomatically": "ON_LOAD",
       "requestHeaders": {
         "expo-channel-name": "production"
-      }
-    },
-    "extra": {
-      "eas": {
-        "projectId": "YOUR-PROJECT-ID"
       }
     },
     "ios": {

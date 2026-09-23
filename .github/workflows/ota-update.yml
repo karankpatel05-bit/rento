@@ -40,7 +40,7 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          if grep -q "YOUR-PROJECT-ID" app.json; then
+          if ! grep -q '"projectId"' app.json; then
             echo "Auto-initializing project on Expo using EXPO_TOKEN..."
             npx eas init --force --non-interactive
             npx eas update:configure --non-interactive
