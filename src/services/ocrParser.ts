@@ -11,14 +11,28 @@ const SHORT_MONTHS: Record<string, number> = {
 };
 
 /**
- * Normalizes dates from various formats:
+ * Normalizes dates from various physical notebook formats:
+ * - DD/MM/YY (e.g. 19/09/25, 16/06/26, 02/09/26)
  * - DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY
- * - DD/MM/YY, DD-MM-YY, DD.MM.YY
- * - YYYY-MM-DD
  * - DD Mon YYYY (e.g., 15 Jul 2025)
+ * - YYYY-MM-DD
  */
 function parseDatePattern(text: string): { dateStr: string; monthYear: string; matchedText: string } | null {
-  // 1. Check for Named Month: "15 Jul 2025" or "5 August 2024"
+  // 1. Check for standard numeric: "19/09/25", "16/06/26", "19-10-2025", "12.05.26"
+  const numericRegex = /\b(0?[1-9]|[12]\d|3[01])[\/\-\.\|](0?[1-9]|1[0-2])[\/\-\.\|](\d{2,4})\b/;
+  const numMatch = text.match(numericRegex);
+  if (numMatch) {
+    const day = parseInt(numMatch[1], 10);
+    const monthIndex = parseInt(numMatch[2], 10) - 1;
+    let year = parseInt(numMatch[3], 10);
+    if (year < 100) year += 2000;
+
+    const formattedDate = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const monthYear = `${MONTH_NAMES[monthIndex]} ${year}`;
+    return { dateStr: formattedDate, monthYear, matchedText: numMatch[0] };
+  }
+
+  // 2. Check for Named Month: "15 Jul 2025" or "5 August 2024"
   const namedMonthRegex = /\b(\d{1,2})[\s\-\/]+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s\-\/]+(\d{2,4})\b/i;
   const namedMatch = text.match(namedMonthRegex);
   if (namedMatch) {
@@ -33,7 +47,7 @@ function parseDatePattern(text: string): { dateStr: string; monthYear: string; m
     return { dateStr: formattedDate, monthYear, matchedText: namedMatch[0] };
   }
 
-  // 2. Check for ISO: "2025-05-12"
+  // 3. Check for ISO: "2025-05-12"
   const isoRegex = /\b(20\d{2})[-/\.](0?[1-9]|1[0-2])[-/\.](0?[1-9]|[12]\d|3[01])\b/;
   const isoMatch = text.match(isoRegex);
   if (isoMatch) {
@@ -45,35 +59,31 @@ function parseDatePattern(text: string): { dateStr: string; monthYear: string; m
     return { dateStr: formattedDate, monthYear, matchedText: isoMatch[0] };
   }
 
-  // 3. Check for standard numeric: "05/04/2025", "5-4-25", "12.06.2024"
-  const numericRegex = /\b(0?[1-9]|[12]\d|3[01])[-/\.](0?[1-9]|1[0-2])[-/\.](\d{2,4})\b/;
-  const numMatch = text.match(numericRegex);
-  if (numMatch) {
-    const day = parseInt(numMatch[1], 10);
-    const monthIndex = parseInt(numMatch[2], 10) - 1;
-    let year = parseInt(numMatch[3], 10);
-    if (year < 100) year += 2000;
-
-    const formattedDate = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const monthYear = `${MONTH_NAMES[monthIndex]} ${year}`;
-    return { dateStr: formattedDate, monthYear, matchedText: numMatch[0] };
-  }
-
   return null;
 }
 
 /**
  * Extracts Payment Mode strictly: UPI, NEFT, or Cash
+ * Also accounts for "By NEFT", "By UPI", and common OCR handwriting variants
  */
 function parsePaymentModePattern(text: string): { mode: PaymentMode; matchedText: string } | null {
-  const modeRegex = /\b(UPI|NEFT|CASH)\b/i;
+  const modeRegex = /\b(?:By\s+)?(NEFT|UPI|CASH|NEP\+|MEFT|NEAT|Csh)\b/i;
   const match = text.match(modeRegex);
   if (match) {
     const upper = match[1].toUpperCase();
     let mode: PaymentMode = 'Cash';
-    if (upper === 'UPI') mode = 'UPI';
-    else if (upper === 'NEFT') mode = 'NEFT';
-    else if (upper === 'CASH') mode = 'Cash';
+    if (upper === 'UPI') {
+      mode = 'UPI';
+    } else if (
+      upper.includes('NEF') ||
+      upper.includes('NEP') ||
+      upper.includes('MEF') ||
+      upper.includes('NEA')
+    ) {
+      mode = 'NEFT';
+    } else if (upper.includes('CASH') || upper.includes('CSH')) {
+      mode = 'Cash';
+    }
 
     return { mode, matchedText: match[0] };
   }
@@ -81,10 +91,10 @@ function parsePaymentModePattern(text: string): { mode: PaymentMode; matchedText
 }
 
 /**
- * Extracts rent Amount while avoiding false positives like years (2024, 2025)
+ * Extracts rent Amount handling Indian bookkeeping notation:
+ * e.g. "40,517/-", "40517/-", "40,517/--", "Rs. 40,517", "₹40517"
  */
 function parseAmountPattern(text: string, excludeMatchedStrings: string[]): { amount: number; matchedText: string } | null {
-  // Strip out already identified date or mode substrings to avoid regex collisions
   let workingText = text;
   excludeMatchedStrings.forEach((s) => {
     if (s) {
@@ -92,27 +102,15 @@ function parseAmountPattern(text: string, excludeMatchedStrings: string[]): { am
     }
   });
 
-  // 1. Look for explicit currency prefix: "Rs. 25,000", "₹25000", "Rs 30000/-"
-  const currencyPrefixRegex = /(?:Rs\.?|₹|INR)\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{2})?|[0-9]{3,7})/i;
-  const currMatch = workingText.match(currencyPrefixRegex);
-  if (currMatch) {
-    const rawNum = currMatch[1].replace(/,/g, '');
-    const num = parseFloat(rawNum);
-    if (!isNaN(num) && num > 0) {
-      return { amount: num, matchedText: currMatch[0] };
-    }
-  }
-
-  // 2. Look for standalone numbers typically representing rent (>= 1000)
-  const standaloneRegex = /\b([1-9][0-9]{0,2}(?:,[0-9]{2,3})+|[1-9][0-9]{3,6})(?:\.[0-9]{2})?\b/;
-  const match = workingText.match(standaloneRegex);
+  // 1. Look for explicit currency prefix or suffix: "40,517/-", "Rs. 40,517", "₹40,517"
+  const amountWithSuffixRegex = /(?:Rs\.?|₹|INR)?\s*([0-9]{1,3}(?:,[0-9]{2,3})+|[0-9]{3,7})\s*(?:\/[-–]{1,2})?/i;
+  const match = workingText.match(amountWithSuffixRegex);
   if (match) {
     const rawNum = match[1].replace(/,/g, '');
     const num = parseFloat(rawNum);
-    // Ignore standalone 4-digit numbers that look like years (2020-2035) unless prefixed with currency
-    if (num >= 2020 && num <= 2035 && !workingText.includes('Rs') && !workingText.includes('₹')) {
-      // Look for another number on the line
-      const secondMatch = workingText.slice(match.index! + match[0].length).match(standaloneRegex);
+    // Ignore standalone numbers that look strictly like a calendar year (2020-2035) unless marked with currency or /-
+    if (num >= 2020 && num <= 2035 && !workingText.includes('Rs') && !workingText.includes('₹') && !workingText.includes('/-')) {
+      const secondMatch = workingText.slice(match.index! + match[0].length).match(amountWithSuffixRegex);
       if (secondMatch) {
         const secondNum = parseFloat(secondMatch[1].replace(/,/g, ''));
         if (!isNaN(secondNum) && secondNum > 0) {
@@ -140,7 +138,7 @@ export function parseHeaderlessNotebookLine(
 
   // 1. Date match
   const dateResult = parseDatePattern(trimmed);
-  if (!dateResult) return null; // A valid ledger row in a notebook always has a transaction date
+  if (!dateResult) return null;
 
   // 2. Payment mode match (UPI, NEFT, Cash)
   const modeResult = parsePaymentModePattern(trimmed);
@@ -164,9 +162,9 @@ export function parseHeaderlessNotebookLine(
   cleanRemarks = cleanRemarks.replace(/^[\s,\-–:;/]+|[\s,\-–:;/]+$/g, '').trim();
 
   // Confidence calculation
-  let confidence = 0.7;
-  if (modeResult) confidence += 0.2;
-  if (amountResult.matchedText.includes('Rs') || amountResult.matchedText.includes('₹') || amountResult.amount >= 2000) {
+  let confidence = 0.75;
+  if (modeResult) confidence += 0.15;
+  if (amountResult.matchedText.includes('/-') || amountResult.matchedText.includes('Rs') || amountResult.amount >= 2000) {
     confidence += 0.1;
   }
 

@@ -43,6 +43,7 @@ export const TenantOnboardingModal: React.FC<TenantOnboardingModalProps> = ({
   const [propertyAddress, setPropertyAddress] = useState<string>('');
   const [unitDesignation, setUnitDesignation] = useState<string>('');
   const [rentAmount, setRentAmount] = useState<string>('');
+  const [securityDeposit, setSecurityDeposit] = useState<string>('');
   const [incrementType, setIncrementType] = useState<'percentage' | 'fixed'>('percentage');
   const [incrementValue, setIncrementValue] = useState<string>('');
   const [incrementNotes, setIncrementNotes] = useState<string>('');
@@ -64,6 +65,7 @@ export const TenantOnboardingModal: React.FC<TenantOnboardingModalProps> = ({
     setPropertyAddress('');
     setUnitDesignation('');
     setRentAmount('');
+    setSecurityDeposit('');
     setIncrementValue('');
     setIncrementNotes('');
     setElectricityLoad('');
@@ -89,6 +91,8 @@ export const TenantOnboardingModal: React.FC<TenantOnboardingModalProps> = ({
           propertyAddress: propertyAddress.trim(),
           unitDesignation: unitDesignation.trim() || 'Unit 1',
           rentAmount: parseFloat(rentAmount) || 0,
+          securityDeposit: parseFloat(securityDeposit) || 0,
+          additionalDeposits: [],
           rentIncrement: {
             type: incrementType,
             value: parseFloat(incrementValue) || 0,
@@ -205,6 +209,27 @@ export const TenantOnboardingModal: React.FC<TenantOnboardingModalProps> = ({
                       onChangeText={setRentAmount}
                     />
                   </View>
+                </View>
+
+                {/* Existing / Initial Security Deposit Taken from Tenant */}
+                <View style={styles.formGroup}>
+                  <View style={styles.labelWithBadge}>
+                    <Text style={styles.inputLabel}>Initial Security Deposit Taken (₹)</Text>
+                    <Text style={styles.optionalBadge}>Optional</Text>
+                  </View>
+                  <View style={styles.currencyRow}>
+                    <Text style={styles.currencySymbol}>₹</Text>
+                    <TextInput
+                      style={styles.currencyInput}
+                      placeholder="e.g. 150000"
+                      keyboardType="numeric"
+                      value={securityDeposit}
+                      onChangeText={setSecurityDeposit}
+                    />
+                  </View>
+                  <Text style={styles.fieldHint}>
+                    Advance deposit taken from tenant. Additional deposits can be added anytime.
+                  </Text>
                 </View>
 
                 {/* Smart Notebook Ledger Import via Camera */}
@@ -742,5 +767,25 @@ const styles = StyleSheet.create({
   },
   scanPastRecordsTextActive: {
     color: '#047857',
+  },
+  labelWithBadge: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  optionalBadge: {
+    fontSize: 11,
+    color: '#64748B',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontWeight: '500',
+  },
+  fieldHint: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 4,
   },
 });

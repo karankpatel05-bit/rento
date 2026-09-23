@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -20,11 +21,17 @@ import {
   CheckCircle2,
   AlertCircle,
   Bell,
+  ShieldCheck,
+  FileDown,
+  History,
 } from 'lucide-react-native';
 import { Tenant, PaymentRecord, InterestCollectionRecord } from '../types';
 import { useApp } from '../context/AppContext';
 import { LogPaymentModal } from '../components/payments/LogPaymentModal';
 import { LogInterestModal } from '../components/tenants/LogInterestModal';
+import { LogAdditionalDepositModal } from '../components/tenants/LogAdditionalDepositModal';
+import { LogPastRentModal } from '../components/payments/LogPastRentModal';
+import { PdfGenerator } from '../services/pdfGenerator';
 
 interface TenantDetailScreenProps {
   tenant: Tenant;
@@ -36,25 +43,62 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
   onBack,
 }) => {
   const {
+    tenants,
     payments,
     interestCollections,
     triggerTestMayNotification,
   } = useApp();
 
+  // Find updated tenant from context state
+  const activeTenant = tenants.find((t) => t.id === tenant.id) || tenant;
+
   const [isLogPaymentOpen, setIsLogPaymentOpen] = useState<boolean>(false);
   const [isLogInterestOpen, setIsLogInterestOpen] = useState<boolean>(false);
+  const [isLogAdditionalDepositOpen, setIsLogAdditionalDepositOpen] = useState<boolean>(false);
+  const [isLogPastRentOpen, setIsLogPastRentOpen] = useState<boolean>(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [activeSubTab, setActiveSubTab] = useState<'payments' | 'electricity'>('payments');
 
-  // Filter payments for this tenant
-  const tenantPayments = payments.filter((p) => p.tenantId === tenant.id);
-  const tenantInterests = interestCollections.filter((ic) => ic.tenantId === tenant.id);
+  // Filter payments & interests for this tenant
+  const tenantPayments = payments.filter((p) => p.tenantId === activeTenant.id);
+  const tenantInterests = interestCollections.filter((ic) => ic.tenantId === activeTenant.id);
+
+  // Security deposit calculations
+  const initialDeposit = activeTenant.securityDeposit || 0;
+  const additionalDeposits = activeTenant.additionalDeposits || [];
+  const totalAdditional = additionalDeposits.reduce((sum, d) => sum + d.amount, 0);
+  const totalSecurityDeposit = initialDeposit + totalAdditional;
 
   const handleTestNotification = async () => {
-    await triggerTestMayNotification(tenant);
+    await triggerTestMayNotification(activeTenant);
     Alert.alert(
       'Push Notification Triggered!',
-      `Sent local reminder: "Collect electricity deposit interest from ${tenant.name}."`
+      `Sent local reminder: "Collect electricity deposit interest from ${activeTenant.name}."`
     );
+  };
+
+  const handleDownloadRentLedgerPDF = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      await PdfGenerator.generateRentLedgerPDF(activeTenant, tenantPayments);
+    } catch (err) {
+      console.error(err);
+      Alert.alert('PDF Error', 'Failed to generate Rent Ledger PDF');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleDownloadElectricityPDF = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      await PdfGenerator.generateElectricityStatementPDF(activeTenant, tenantInterests);
+    } catch (err) {
+      console.error(err);
+      Alert.alert('PDF Error', 'Failed to generate Electricity Statement PDF');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   return (
@@ -65,8 +109,8 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
           <ArrowLeft size={20} color="#0F172A" />
         </TouchableOpacity>
         <View style={styles.topBarTitleArea}>
-          <Text style={styles.topBarTitle}>{tenant.unitDesignation}</Text>
-          <Text style={styles.topBarSub}>{tenant.name}</Text>
+          <Text style={styles.topBarTitle}>{activeTenant.unitDesignation}</Text>
+          <Text style={styles.topBarSub}>{activeTenant.name}</Text>
         </View>
         <TouchableOpacity
           style={styles.testNotifyBtn}
@@ -82,22 +126,22 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
         <View style={styles.profileCard}>
           <View style={styles.profileHeader}>
             <View>
-              <Text style={styles.tenantName}>{tenant.name}</Text>
+              <Text style={styles.tenantName}>{activeTenant.name}</Text>
               <View style={styles.infoRow}>
                 <MapPin size={13} color="#64748B" />
                 <Text style={styles.propertyText}>
-                  {tenant.unitDesignation}, {tenant.propertyAddress}
+                  {activeTenant.unitDesignation}, {activeTenant.propertyAddress}
                 </Text>
               </View>
               <View style={styles.infoRow}>
                 <Phone size={13} color="#64748B" />
-                <Text style={styles.propertyText}>{tenant.phone}</Text>
+                <Text style={styles.propertyText}>{activeTenant.phone}</Text>
               </View>
             </View>
             <View style={styles.rentBadge}>
               <Text style={styles.rentLabel}>Current Rent</Text>
               <Text style={styles.rentAmount}>
-                ₹{tenant.rentAmount.toLocaleString()}
+                ₹{activeTenant.rentAmount.toLocaleString()}
               </Text>
             </View>
           </View>
@@ -111,10 +155,10 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
                 <Text style={styles.detailLabel}>Escalation</Text>
               </View>
               <Text style={styles.detailValue}>
-                +{tenant.rentIncrement.value}
-                {tenant.rentIncrement.type === 'percentage' ? '%' : '₹'} / yr
+                +{activeTenant.rentIncrement.value}
+                {activeTenant.rentIncrement.type === 'percentage' ? '%' : '₹'} / yr
               </Text>
-              <Text style={styles.detailSub}>{tenant.rentIncrement.notes}</Text>
+              <Text style={styles.detailSub}>{activeTenant.rentIncrement.notes}</Text>
             </View>
 
             {/* Electricity Board & Deposit */}
@@ -124,9 +168,9 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
                 <Text style={styles.detailLabel}>Electricity Deposit</Text>
               </View>
               <Text style={[styles.detailValue, { color: '#B45309' }]}>
-                ₹{tenant.electricityDeposit.toLocaleString()}
+                ₹{activeTenant.electricityDeposit.toLocaleString()}
               </Text>
-              <Text style={styles.detailSub}>{tenant.electricityLoad}</Text>
+              <Text style={styles.detailSub}>{activeTenant.electricityLoad}</Text>
             </View>
           </View>
 
@@ -134,7 +178,7 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
           <View
             style={[
               styles.workflowBanner,
-              tenant.maintenanceWorkflow === 'variable_rent_deduction'
+              activeTenant.maintenanceWorkflow === 'variable_rent_deduction'
                 ? styles.workflowBannerWarning
                 : styles.workflowBannerMuted,
             ]}
@@ -142,7 +186,7 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
             <Wrench
               size={15}
               color={
-                tenant.maintenanceWorkflow === 'variable_rent_deduction'
+                activeTenant.maintenanceWorkflow === 'variable_rent_deduction'
                   ? '#B45309'
                   : '#475569'
               }
@@ -151,28 +195,118 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
               <Text
                 style={[
                   styles.workflowTitle,
-                  tenant.maintenanceWorkflow === 'variable_rent_deduction'
+                  activeTenant.maintenanceWorkflow === 'variable_rent_deduction'
                     ? { color: '#92400E' }
                     : { color: '#334155' },
                 ]}
               >
-                {tenant.maintenanceWorkflow === 'variable_rent_deduction'
+                {activeTenant.maintenanceWorkflow === 'variable_rent_deduction'
                   ? 'Variable Rent Deduction System'
                   : 'Standard Maintenance System'}
               </Text>
               <Text
                 style={[
                   styles.workflowDesc,
-                  tenant.maintenanceWorkflow === 'variable_rent_deduction'
+                  activeTenant.maintenanceWorkflow === 'variable_rent_deduction'
                     ? { color: '#B45309' }
                     : { color: '#64748B' },
                 ]}
               >
-                {tenant.maintenanceWorkflow === 'variable_rent_deduction'
+                {activeTenant.maintenanceWorkflow === 'variable_rent_deduction'
                   ? 'Maintenance is deducted directly from rent payout twice a year.'
                   : 'Tenant settles maintenance charges separately with the society.'}
               </Text>
             </View>
+          </View>
+        </View>
+
+        {/* Tenant Security Deposit Held Card */}
+        <View style={styles.depositCard}>
+          <View style={styles.depositTopRow}>
+            <View style={styles.depositIconCircle}>
+              <ShieldCheck size={20} color="#059669" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.depositSectionLabel}>Security Deposit Held</Text>
+              <Text style={styles.depositTotalValue}>₹{totalSecurityDeposit.toLocaleString()}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.addDepositBtn}
+              onPress={() => setIsLogAdditionalDepositOpen(true)}
+              activeOpacity={0.8}
+            >
+              <Plus size={14} color="#059669" />
+              <Text style={styles.addDepositBtnText}>Add Deposit</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.depositBreakdownRow}>
+            <View style={styles.depositSubItem}>
+              <Text style={styles.depositSubLabel}>Initial Deposit</Text>
+              <Text style={styles.depositSubValue}>₹{initialDeposit.toLocaleString()}</Text>
+            </View>
+            <View style={styles.depositSubDivider} />
+            <View style={styles.depositSubItem}>
+              <Text style={styles.depositSubLabel}>Additional Deposits</Text>
+              <Text style={styles.depositSubValue}>
+                ₹{totalAdditional.toLocaleString()} ({additionalDeposits.length} logs)
+              </Text>
+            </View>
+          </View>
+
+          {/* Mini history list if any additional deposits were logged */}
+          {additionalDeposits.length > 0 && (
+            <View style={styles.depositHistoryBox}>
+              <Text style={styles.depositHistoryTitle}>Additional Deposit History</Text>
+              {additionalDeposits.map((ad) => (
+                <View key={ad.id} style={styles.depositHistoryItem}>
+                  <View style={styles.depositHistoryLeft}>
+                    <Text style={styles.depositHistoryDate}>{ad.date}</Text>
+                    {ad.remarks ? (
+                      <Text style={styles.depositHistoryRemark}>{ad.remarks}</Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.depositHistoryRight}>
+                    <Text style={styles.depositHistoryAmount}>+₹{ad.amount.toLocaleString()}</Text>
+                    <View style={styles.depositMiniBadge}>
+                      <Text style={styles.depositMiniBadgeText}>{ad.paymentMode}</Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* PDF Reports Export Bar */}
+        <View style={styles.reportsCard}>
+          <View style={styles.reportsHeader}>
+            <FileDown size={18} color="#0F172A" />
+            <Text style={styles.reportsTitle}>Download Statements & PDFs</Text>
+            {isGeneratingPdf && (
+              <ActivityIndicator size="small" color="#059669" style={{ marginLeft: 8 }} />
+            )}
+          </View>
+          <View style={styles.reportsButtonRow}>
+            <TouchableOpacity
+              style={styles.pdfBtn}
+              onPress={handleDownloadRentLedgerPDF}
+              disabled={isGeneratingPdf}
+              activeOpacity={0.8}
+            >
+              <FileText size={15} color="#047857" />
+              <Text style={styles.pdfBtnText}>Rent Ledger PDF</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.pdfBtn, styles.pdfBtnAmber]}
+              onPress={handleDownloadElectricityPDF}
+              disabled={isGeneratingPdf}
+              activeOpacity={0.8}
+            >
+              <Zap size={15} color="#B45309" />
+              <Text style={[styles.pdfBtnText, styles.pdfBtnTextAmber]}>Electricity PDF</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -224,12 +358,26 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
         {/* Tab 1: Monthly Payments Ledger */}
         {activeSubTab === 'payments' && (
           <View style={styles.ledgerSection}>
+            <View style={styles.ledgerHeaderRow}>
+              <Text style={styles.ledgerHeaderTitle}>
+                Payment Records ({tenantPayments.length})
+              </Text>
+              <TouchableOpacity
+                style={styles.logPastRentBtn}
+                onPress={() => setIsLogPastRentOpen(true)}
+                activeOpacity={0.8}
+              >
+                <History size={13} color="#059669" />
+                <Text style={styles.logPastRentText}>+ Log Past Month</Text>
+              </TouchableOpacity>
+            </View>
+
             {tenantPayments.length === 0 ? (
               <View style={styles.emptyState}>
                 <FileText size={32} color="#94A3B8" />
                 <Text style={styles.emptyTitle}>No payments logged yet</Text>
                 <Text style={styles.emptyDesc}>
-                  Tap "+ Log Payment" below to record the first monthly rent.
+                  Tap "+ Log Payment" or "+ Log Past Month" to record rent history.
                 </Text>
               </View>
             ) : (
@@ -341,7 +489,7 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
                 <View style={{ flex: 1 }}>
                   <Text style={styles.summaryTitle}>May 1st Electricity Rebates</Text>
                   <Text style={styles.summarySub}>
-                    Owner Deposit: ₹{tenant.electricityDeposit.toLocaleString()}
+                    Owner Deposit: ₹{activeTenant.electricityDeposit.toLocaleString()}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -364,7 +512,7 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
                 <AlertCircle size={32} color="#D97706" />
                 <Text style={styles.emptyTitle}>No interest logged yet</Text>
                 <Text style={styles.emptyDesc}>
-                  Tap "Log Collection" above to record annual interest collected from {tenant.name}.
+                  Tap "Log Collection" above to record annual interest collected from {activeTenant.name}.
                 </Text>
               </View>
             ) : (
@@ -410,12 +558,22 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
       <LogPaymentModal
         visible={isLogPaymentOpen}
         onClose={() => setIsLogPaymentOpen(false)}
-        tenant={tenant}
+        tenant={activeTenant}
       />
       <LogInterestModal
         visible={isLogInterestOpen}
         onClose={() => setIsLogInterestOpen(false)}
-        tenant={tenant}
+        tenant={activeTenant}
+      />
+      <LogAdditionalDepositModal
+        visible={isLogAdditionalDepositOpen}
+        onClose={() => setIsLogAdditionalDepositOpen(false)}
+        tenant={activeTenant}
+      />
+      <LogPastRentModal
+        visible={isLogPastRentOpen}
+        onClose={() => setIsLogPastRentOpen(false)}
+        tenant={activeTenant}
       />
     </View>
   );
@@ -885,5 +1043,214 @@ const styles = StyleSheet.create({
   },
   modeBadgeTextCash: {
     color: '#047857',
+  },
+  depositCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
+  },
+  depositTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 14,
+  },
+  depositIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  depositSectionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  depositTotalValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#059669',
+    marginTop: 2,
+  },
+  addDepositBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  addDepositBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  depositBreakdownRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  depositSubItem: {
+    flex: 1,
+  },
+  depositSubLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    marginBottom: 2,
+  },
+  depositSubValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  depositSubDivider: {
+    width: 1,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 12,
+  },
+  depositHistoryBox: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  depositHistoryTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  depositHistoryItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+  },
+  depositHistoryLeft: {
+    flex: 1,
+  },
+  depositHistoryDate: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  depositHistoryRemark: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 1,
+  },
+  depositHistoryRight: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  depositHistoryAmount: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  depositMiniBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  depositMiniBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  reportsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
+  },
+  reportsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  reportsTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  reportsButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  pdfBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    paddingVertical: 11,
+    borderRadius: 12,
+  },
+  pdfBtnAmber: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  pdfBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#047857',
+  },
+  pdfBtnTextAmber: {
+    color: '#B45309',
+  },
+  ledgerHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  ledgerHeaderTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  logPastRentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#059669',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  logPastRentText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#059669',
   },
 });

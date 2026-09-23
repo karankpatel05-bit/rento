@@ -9,6 +9,16 @@ export interface RentIncrementCondition {
   notes?: string;
 }
 
+export interface AdditionalDepositRecord {
+  id: string;
+  tenantId: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  paymentMode: PaymentMode;
+  remarks: string;
+  createdAt: string;
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -16,9 +26,11 @@ export interface Tenant {
   propertyAddress: string;
   unitDesignation: string;
   rentAmount: number;
+  securityDeposit: number; // Initial / Existing deposit taken from tenant
+  additionalDeposits?: AdditionalDepositRecord[]; // Any additional deposits taken later
   rentIncrement: RentIncrementCondition;
   electricityLoad: string; // e.g., "5 kW" or "3-phase 7 kW"
-  electricityDeposit: number; // Deposit given by owner
+  electricityDeposit: number; // Deposit given by owner to electricity board
   maintenanceWorkflow: MaintenanceWorkflow;
   leaseStartDate: string;
   active: boolean;

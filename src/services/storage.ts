@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Tenant, PaymentRecord, InterestCollectionRecord } from '../types';
+import { Tenant, PaymentRecord, InterestCollectionRecord, AdditionalDepositRecord } from '../types';
 
 const STORAGE_KEYS = {
   TENANTS: '@rento_tenants_v2',
@@ -40,6 +40,18 @@ export const StorageService = {
       tenants.unshift(tenant);
     }
     await AsyncStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(tenants));
+  },
+
+  async addAdditionalDeposit(tenantId: string, deposit: AdditionalDepositRecord): Promise<void> {
+    const tenants = await this.getTenants();
+    const tenant = tenants.find((t) => t.id === tenantId);
+    if (tenant) {
+      if (!tenant.additionalDeposits) {
+        tenant.additionalDeposits = [];
+      }
+      tenant.additionalDeposits.unshift(deposit);
+      await AsyncStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(tenants));
+    }
   },
 
   async deleteTenant(id: string): Promise<void> {

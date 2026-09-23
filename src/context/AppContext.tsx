@@ -1,5 +1,11 @@
-import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
-import { Tenant, PaymentRecord, InterestCollectionRecord, AppAlert } from '../types';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import {
+  Tenant,
+  PaymentRecord,
+  InterestCollectionRecord,
+  AppAlert,
+  AdditionalDepositRecord,
+} from '../types';
 import { StorageService } from '../services/storage';
 import { NotificationService } from '../services/notifications';
 
@@ -17,6 +23,10 @@ interface AppContextType {
   ) => Promise<void>;
   updateTenant: (tenant: Tenant) => Promise<void>;
   deleteTenant: (id: string) => Promise<void>;
+  addAdditionalDeposit: (
+    tenantId: string,
+    deposit: Omit<AdditionalDepositRecord, 'id' | 'createdAt' | 'tenantId'>
+  ) => Promise<void>;
   logPayment: (payment: Omit<PaymentRecord, 'id' | 'createdAt'>) => Promise<void>;
   batchLogPayments: (payments: Omit<PaymentRecord, 'id' | 'createdAt'>[]) => Promise<void>;
   recordInterestCollection: (record: Omit<InterestCollectionRecord, 'id'>) => Promise<void>;
@@ -97,6 +107,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await loadAll();
   };
 
+  const addAdditionalDeposit = async (
+    tenantId: string,
+    depositData: Omit<AdditionalDepositRecord, 'id' | 'createdAt' | 'tenantId'>
+  ) => {
+    const deposit: AdditionalDepositRecord = {
+      ...depositData,
+      id: `dep-${Date.now()}`,
+      tenantId,
+      createdAt: new Date().toISOString(),
+    };
+    await StorageService.addAdditionalDeposit(tenantId, deposit);
+    await loadAll();
+  };
+
   const logPayment = async (paymentData: Omit<PaymentRecord, 'id' | 'createdAt'>) => {
     const newPayment: PaymentRecord = {
       ...paymentData,
@@ -173,6 +197,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addTenant,
         updateTenant,
         deleteTenant,
+        addAdditionalDeposit,
         logPayment,
         batchLogPayments,
         recordInterestCollection,
