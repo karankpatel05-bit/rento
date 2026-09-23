@@ -13,6 +13,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Building2, Bell, ShieldCheck } from 'lucide-react-native';
 import { AppProvider, useApp } from './src/context/AppContext';
 import { Header } from './src/components/common/Header';
+import { UpdateBanner } from './src/components/common/UpdateBanner';
 import { DashboardScreen } from './src/screens/DashboardScreen';
 import { TenantDetailScreen } from './src/screens/TenantDetailScreen';
 import { AlertsScreen } from './src/screens/AlertsScreen';
@@ -63,6 +64,9 @@ function MainApp() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+      {/* In-App OTA Update Status Banner */}
+      <UpdateBanner />
 
       {/* Dynamic Header */}
       {!selectedTenant && (

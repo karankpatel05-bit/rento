@@ -6,6 +6,22 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/YOUR-PROJECT-ID",
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD",
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "YOUR-PROJECT-ID"
+      }
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.landlord.rento",
@@ -44,7 +60,8 @@
           "photosPermission": "Rento requires photo library access to upload ledger images."
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-updates"
     ]
   }
 }
