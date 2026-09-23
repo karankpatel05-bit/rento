@@ -17,21 +17,18 @@ jobs:
     name: Publish Over-The-Air (OTA) Update
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+
     steps:
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🟢 Setup Node.js
+      - name: 🟢 Setup Node.js (v22)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
-
-      - name: 📦 Setup Expo & EAS CLI
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
 
       - name: 📦 Install dependencies
         run: npm ci
@@ -39,9 +36,24 @@ jobs:
       - name: 🔍 Typecheck code
         run: npx tsc --noEmit
 
+      - name: 🔗 Auto-link EAS Project ID (if first time)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if grep -q "YOUR-PROJECT-ID" app.json; then
+            echo "Auto-initializing project on Expo using EXPO_TOKEN..."
+            npx eas init --force --non-interactive
+            npx eas update:configure --non-interactive
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add app.json
+            git commit -m "Chore: Link EAS Project ID from Expo [skip ci]" || true
+            git push origin main || true
+          fi
+
       - name: 🚀 Publish EAS OTA Update to Production
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           MESSAGE="${{ github.event.inputs.message || 'Automated OTA update' }}"
-          eas update --branch production --message "$MESSAGE" --non-interactive
+          npx eas update --branch production --message "$MESSAGE" --non-interactive

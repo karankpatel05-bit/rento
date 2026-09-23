@@ -13,14 +13,17 @@ jobs:
     name: Build Standalone APK via EAS Local
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+
     steps:
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🟢 Setup Node.js (v20)
+      - name: 🟢 Setup Node.js (v22)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: ☕ Setup Java (JDK 17)
@@ -35,17 +38,26 @@ jobs:
       - name: 📝 Accept Android SDK Licenses
         run: yes | sdkmanager --licenses || true
 
-      - name: 📦 Setup Expo & EAS CLI
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
       - name: 📦 Install dependencies
         run: npm ci
 
       - name: 🔍 Typecheck code
         run: npx tsc --noEmit
+
+      - name: 🔗 Auto-link EAS Project ID (if first time)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if grep -q "YOUR-PROJECT-ID" app.json; then
+            echo "Auto-initializing project on Expo using EXPO_TOKEN..."
+            npx eas init --force --non-interactive
+            npx eas update:configure --non-interactive
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add app.json
+            git commit -m "Chore: Link EAS Project ID from Expo [skip ci]" || true
+            git push origin main || true
+          fi
 
       - name: 🔑 Configure Android Signing Credentials
         run: |
@@ -91,7 +103,7 @@ jobs:
         run: |
           PROFILE="${{ github.event.inputs.profile || 'preview' }}"
           echo "Building Android APK locally using profile: $PROFILE"
-          eas build --platform android --profile "$PROFILE" --local --output=./rento-release.apk --non-interactive
+          npx eas build --platform android --profile "$PROFILE" --local --output=./rento-release.apk --non-interactive
 
       - name: 📤 Upload APK Artifact to GitHub
         uses: actions/upload-artifact@v4
