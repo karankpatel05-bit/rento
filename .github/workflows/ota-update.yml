@@ -7,17 +7,13 @@ on:
       - master
   workflow_dispatch:
     inputs:
-      branch:
-        description: 'EAS Update Branch to target'
-        required: true
-        default: 'production'
       message:
         description: 'Update Message'
         required: false
-        default: 'Manual OTA update trigger'
+        default: 'Automated OTA update'
 
 jobs:
-  update:
+  ota-update:
     name: Publish Over-The-Air (OTA) Update
     runs-on: ubuntu-latest
 
@@ -31,7 +27,7 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: 📦 Setup EAS and Expo CLI
+      - name: 📦 Setup Expo & EAS CLI
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
@@ -43,10 +39,9 @@ jobs:
       - name: 🔍 Typecheck code
         run: npx tsc --noEmit
 
-      - name: 🚀 Publish EAS OTA Update
+      - name: 🚀 Publish EAS OTA Update to Production
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          BRANCH="${{ github.event.inputs.branch || 'production' }}"
-          MESSAGE="${{ github.event.inputs.message || github.event.head_commit.message || 'Automated OTA update' }}"
-          eas update --branch "$BRANCH" --message "$MESSAGE" --non-interactive
+          MESSAGE="${{ github.event.inputs.message || 'Automated OTA update' }}"
+          eas update --branch production --message "$MESSAGE" --non-interactive
