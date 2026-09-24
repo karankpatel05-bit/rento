@@ -54,8 +54,8 @@ jobs:
         run: |
           if ! grep -q '"projectId"' app.json; then
             echo "Auto-initializing project on Expo using EXPO_TOKEN..."
-            npx eas init --force --non-interactive
-            npx eas update:configure --non-interactive
+            npx --yes eas-cli init --force --non-interactive
+            npx --yes eas-cli update:configure --non-interactive
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add app.json
@@ -111,7 +111,7 @@ jobs:
         run: |
           PROFILE="${{ github.event.inputs.profile || 'preview' }}"
           echo "Building Android APK locally using profile: $PROFILE"
-          if npx eas build --platform android --profile "$PROFILE" --local --output=./rento-release.apk --non-interactive; then
+          if npx --yes eas-cli build --platform android --profile "$PROFILE" --local --output=./rento-release.apk --non-interactive; then
             echo "EAS local build completed successfully!"
           else
             echo "EAS local build exited. Performing direct native compilation fallback..."
