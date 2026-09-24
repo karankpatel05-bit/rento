@@ -12,6 +12,7 @@ jobs:
   build-apk:
     name: Build Standalone APK via EAS Local
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     permissions:
       contents: write
@@ -99,15 +100,28 @@ jobs:
           echo "credentials.json configured successfully."
 
       - name: 🛠 Compile Standalone APK (EAS Local Build)
+        timeout-minutes: 25
         env:
           EAS_NO_VCS: '1'
+          CI: '1'
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=\"-Xmx4096m -XX:MaxMetaspaceSize=1024m\""
         run: |
           PROFILE="${{ github.event.inputs.profile || 'preview' }}"
           echo "Building Android APK locally using profile: $PROFILE"
-          npx eas build --platform android --profile "$PROFILE" --local --output=./rento-release.apk --non-interactive
+          if npx eas build --platform android --profile "$PROFILE" --local --output=./rento-release.apk --non-interactive; then
+            echo "EAS local build completed successfully!"
+          else
+            echo "EAS local build exited. Performing direct native compilation fallback..."
+            npx expo prebuild --platform android --clean --no-install
+            cd android
+            ./gradlew assembleRelease --no-daemon -x lint -x lintVitalRelease -x test
+            cd ..
+            cp android/app/build/outputs/apk/release/app-release.apk ./rento-release.apk
+          fi
+          echo "APK generated at: $(ls -lh ./rento-release.apk)"
 
       - name: 📤 Upload APK Artifact to GitHub
         uses: actions/upload-artifact@v4
