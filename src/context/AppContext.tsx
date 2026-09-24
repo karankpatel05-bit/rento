@@ -22,6 +22,9 @@ interface AppContextType {
   isPinSet: boolean;
   isPinEnabled: boolean;
   isAppLocked: boolean;
+  adminEmail: string;
+  updateAdminEmail: (email: string) => Promise<void>;
+  resetPinWithOtp: (newPin: string) => Promise<void>;
   unlockApp: (enteredPin: string) => boolean;
   lockApp: () => void;
   setupPin: (newPin: string) => Promise<void>;
@@ -61,6 +64,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isPinSet, setIsPinSet] = useState<boolean>(false);
   const [isPinEnabled, setIsPinEnabled] = useState<boolean>(false);
   const [isAppLocked, setIsAppLocked] = useState<boolean>(false);
+  const [adminEmail, setAdminEmail] = useState<string>('karankpatel05@gmail.com');
 
   const loadAll = async () => {
     try {
@@ -72,6 +76,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const savedPin = await StorageService.getSecurityPin();
       const pinEnabled = await StorageService.isPinEnabled();
+      const savedEmail = await StorageService.getAdminEmail();
 
       setTenants(loadedTenants);
       setPayments(loadedPayments);
@@ -79,6 +84,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSecurityPin(savedPin);
       setIsPinSet(Boolean(savedPin));
       setIsPinEnabled(pinEnabled);
+      setAdminEmail(savedEmail);
 
       if (Boolean(savedPin) && pinEnabled) {
         setIsAppLocked(true);
@@ -146,6 +152,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!enabled) {
       setIsAppLocked(false);
     }
+  };
+
+  const updateAdminEmail = async (email: string): Promise<void> => {
+    await StorageService.saveAdminEmail(email);
+    setAdminEmail(email.trim().toLowerCase());
+  };
+
+  const resetPinWithOtp = async (newPin: string): Promise<void> => {
+    await StorageService.saveSecurityPin(newPin);
+    setSecurityPin(newPin);
+    setIsPinSet(true);
+    setIsPinEnabled(true);
+    setIsAppLocked(false);
   };
 
   const resetPinEmergency = async (): Promise<void> => {
@@ -286,6 +305,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isPinSet,
         isPinEnabled,
         isAppLocked,
+        adminEmail,
+        updateAdminEmail,
+        resetPinWithOtp,
         unlockApp,
         lockApp,
         setupPin,

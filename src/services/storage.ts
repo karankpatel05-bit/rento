@@ -8,7 +8,11 @@ const STORAGE_KEYS = {
   CLEAN_INITIALIZED: '@rento_clean_v2',
   SECURITY_PIN: '@rento_security_pin',
   PIN_ENABLED: '@rento_pin_enabled',
+  ADMIN_EMAIL: '@rento_admin_email',
+  SMTP_CONFIG: '@rento_smtp_config',
 };
+
+export const DEFAULT_ADMIN_EMAIL = 'karankpatel05@gmail.com';
 
 export const StorageService = {
   async init(): Promise<void> {
@@ -155,5 +159,23 @@ export const StorageService = {
   async removeSecurityPin(): Promise<void> {
     await AsyncStorage.removeItem(STORAGE_KEYS.SECURITY_PIN);
     await AsyncStorage.setItem(STORAGE_KEYS.PIN_ENABLED, 'false');
+  },
+
+  async getAdminEmail(): Promise<string> {
+    const email = await AsyncStorage.getItem(STORAGE_KEYS.ADMIN_EMAIL);
+    return (email && email.trim()) ? email.trim().toLowerCase() : DEFAULT_ADMIN_EMAIL;
+  },
+
+  async saveAdminEmail(email: string): Promise<void> {
+    await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_EMAIL, email.trim().toLowerCase());
+  },
+
+  async getSmtpConfig(): Promise<{ host?: string; port?: number; user?: string; pass?: string; service?: string } | null> {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.SMTP_CONFIG);
+    return data ? JSON.parse(data) : null;
+  },
+
+  async saveSmtpConfig(config: { host?: string; port?: number; user?: string; pass?: string; service?: string }): Promise<void> {
+    await AsyncStorage.setItem(STORAGE_KEYS.SMTP_CONFIG, JSON.stringify(config));
   },
 };

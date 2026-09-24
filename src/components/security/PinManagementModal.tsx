@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Vibration,
 } from 'react-native';
 import * as Updates from 'expo-updates';
 import {
@@ -26,6 +27,7 @@ import {
   Trash2,
   Sparkles,
   RefreshCw,
+  Mail,
 } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
 
@@ -41,6 +43,7 @@ export const PinManagementModal: React.FC<PinManagementModalProps> = ({
   const {
     isPinSet,
     isPinEnabled,
+    adminEmail,
     setupPin,
     changePin,
     togglePinEnabled,
@@ -49,9 +52,9 @@ export const PinManagementModal: React.FC<PinManagementModalProps> = ({
     lockApp,
   } = useApp();
 
-  // Workflow steps: 'menu' | 'setup_pin' | 'confirm_pin' | 'verify_old' | 'enter_new' | 'confirm_new'
+  // Workflow steps: 'menu' | 'setup_pin' | 'confirm_pin' | 'verify_old' | 'enter_new' | 'confirm_new' | 'remove_verify_old'
   const [mode, setMode] = useState<
-    'menu' | 'setup_pin' | 'confirm_pin' | 'verify_old' | 'enter_new' | 'confirm_new'
+    'menu' | 'setup_pin' | 'confirm_pin' | 'verify_old' | 'enter_new' | 'confirm_new' | 'remove_verify_old'
   >('menu');
 
   const [enteredPin, setEnteredPin] = useState<string>('');
@@ -135,6 +138,17 @@ export const PinManagementModal: React.FC<PinManagementModalProps> = ({
         setErrorMessage('New PINs do not match. Try again.');
         setEnteredPin('');
       }
+    } else if (mode === 'remove_verify_old') {
+      const success = await changePin(pin, pin);
+      if (success) {
+        await resetPinEmergency();
+        Alert.alert('PIN Removed', 'Security PIN protection has been disabled.');
+        resetFlow();
+      } else {
+        Vibration.vibrate(Platform.OS === 'android' ? 100 : [0, 100]);
+        setErrorMessage('Current PIN was incorrect. Please try again.');
+        setEnteredPin('');
+      }
     }
   };
 
@@ -165,17 +179,16 @@ export const PinManagementModal: React.FC<PinManagementModalProps> = ({
 
   const handleRemovePin = () => {
     Alert.alert(
-      'Reset Security PIN?',
-      'Are you sure you want to reset/remove your PIN? All property and tenant records will remain 100% safe. The app will open directly without asking for a code.',
+      'Remove Security PIN',
+      `To remove your PIN protection, enter your current 4-digit PIN for authorization.\n\nIf you have forgotten your PIN, use the "Forgot PIN? Reset via Admin Email OTP" option on the lock screen (sent to ${adminEmail}).`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reset PIN',
-          style: 'destructive',
-          onPress: async () => {
-            await resetPinEmergency();
-            Alert.alert('PIN Reset', 'Security PIN has been cleared. App lock is disabled.');
-            resetFlow();
+          text: 'Enter Current PIN',
+          onPress: () => {
+            setMode('remove_verify_old');
+            setEnteredPin('');
+            setErrorMessage(null);
           },
         },
       ]
@@ -272,6 +285,8 @@ export const PinManagementModal: React.FC<PinManagementModalProps> = ({
         return 'Confirm your 4-Digit PIN';
       case 'verify_old':
         return 'Enter Current PIN';
+      case 'remove_verify_old':
+        return 'Enter Current PIN to Remove';
       case 'enter_new':
         return 'Enter New 4-Digit PIN';
       case 'confirm_new':
@@ -289,6 +304,8 @@ export const PinManagementModal: React.FC<PinManagementModalProps> = ({
         return 'Re-enter the same 4-digit code to confirm.';
       case 'verify_old':
         return 'Enter your existing PIN before changing.';
+      case 'remove_verify_old':
+        return 'Enter your existing 4-digit code to disable PIN protection.';
       case 'enter_new':
         return 'Choose your new 4-digit code.';
       case 'confirm_new':
@@ -354,6 +371,22 @@ export const PinManagementModal: React.FC<PinManagementModalProps> = ({
                   thumbColor="#FFFFFF"
                   trackColor={{ false: '#CBD5E1', true: '#10B981' }}
                 />
+              </View>
+
+              {/* Authorized Admin Email Card */}
+              <View style={styles.adminEmailCard}>
+                <View style={styles.adminEmailLeft}>
+                  <View style={styles.adminEmailIcon}>
+                    <Mail size={16} color="#0284C7" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.adminEmailLabel}>AUTHORIZED ADMIN EMAIL</Text>
+                    <Text style={styles.adminEmailValue}>{adminEmail}</Text>
+                    <Text style={styles.adminEmailSub}>
+                      All PIN reset OTPs are strictly dispatched to this email address.
+                    </Text>
+                  </View>
+                </View>
               </View>
 
               {/* Action Buttons */}
@@ -656,6 +689,46 @@ const styles = StyleSheet.create({
   statusDesc: {
     fontSize: 11,
     color: '#64748B',
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  adminEmailCard: {
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 14,
+  },
+  adminEmailLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  adminEmailIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E0F2FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  adminEmailLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0369A1',
+    letterSpacing: 0.5,
+  },
+  adminEmailValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0C4A6E',
+    marginTop: 2,
+  },
+  adminEmailSub: {
+    fontSize: 11,
+    color: '#0284C7',
     marginTop: 2,
     lineHeight: 15,
   },
