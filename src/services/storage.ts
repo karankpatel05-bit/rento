@@ -28,7 +28,13 @@ export const StorageService = {
 
   async getTenants(): Promise<Tenant[]> {
     const data = await AsyncStorage.getItem(STORAGE_KEYS.TENANTS);
-    return data ? JSON.parse(data) : [];
+    if (!data) return [];
+    const list: Tenant[] = JSON.parse(data);
+    return list.map((t) => ({
+      ...t,
+      isFlexiblePayer: t.isFlexiblePayer ?? (t.paymentPlanType === 'flexible'),
+      paymentPlanType: t.paymentPlanType ?? (t.isFlexiblePayer ? 'flexible' : 'fixed'),
+    }));
   },
 
   async saveTenant(tenant: Tenant): Promise<void> {

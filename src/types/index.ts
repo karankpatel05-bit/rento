@@ -26,6 +26,8 @@ export interface Tenant {
   propertyAddress: string;
   unitDesignation: string;
   rentAmount: number;
+  isFlexiblePayer?: boolean; // True if tenant pays irregular/random figures instead of fixed amount
+  paymentPlanType?: 'fixed' | 'flexible'; // 'fixed' = standard monthly rent, 'flexible' = random figure installments
   securityDeposit: number; // Initial / Existing deposit taken from tenant
   additionalDeposits?: AdditionalDepositRecord[]; // Any additional deposits taken later
   rentIncrement: RentIncrementCondition;

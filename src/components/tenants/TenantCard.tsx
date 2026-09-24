@@ -7,8 +7,12 @@ import {
   Wrench,
   TrendingUp,
   Plus,
+  Sparkles,
+  Scale,
 } from 'lucide-react-native';
 import { Tenant } from '../../types';
+import { useApp } from '../../context/AppContext';
+import { calculateTenantRentSummary } from '../../utils/duesCalculator';
 
 interface TenantCardProps {
   tenant: Tenant;
@@ -21,18 +25,32 @@ export const TenantCard: React.FC<TenantCardProps> = ({
   onPress,
   onLogPayment,
 }) => {
+  const { payments } = useApp();
+  const summary = calculateTenantRentSummary(tenant, payments);
+  const tenantPayments = payments.filter((p) => p.tenantId === tenant.id);
+  const isFlexible = Boolean(tenant.isFlexiblePayer || tenant.paymentPlanType === 'flexible');
+
   return (
     <TouchableOpacity
       style={styles.card}
       onPress={onPress}
       activeOpacity={0.85}
     >
-      {/* Top row: Unit & Rent */}
+      {/* Top row: Unit, Plan Badge & Base Rent */}
       <View style={styles.topRow}>
-        <View style={styles.unitBadge}>
-          <Building2 size={14} color="#047857" />
-          <Text style={styles.unitText}>{tenant.unitDesignation}</Text>
+        <View style={styles.badgeGroup}>
+          <View style={styles.unitBadge}>
+            <Building2 size={13} color="#047857" />
+            <Text style={styles.unitText}>{tenant.unitDesignation}</Text>
+          </View>
+          <View style={[styles.planBadge, isFlexible ? styles.planBadgePurple : styles.planBadgeSlate]}>
+            {isFlexible && <Sparkles size={11} color="#7C3AED" />}
+            <Text style={[styles.planBadgeText, isFlexible ? styles.planBadgeTextPurple : styles.planBadgeTextSlate]}>
+              {isFlexible ? 'Flexible Payer' : 'Fixed Payer'}
+            </Text>
+          </View>
         </View>
+
         <View style={styles.rentBadge}>
           <Text style={styles.rentAmount}>₹{tenant.rentAmount.toLocaleString()}</Text>
           <Text style={styles.rentPeriod}>/mo</Text>
@@ -42,6 +60,41 @@ export const TenantCard: React.FC<TenantCardProps> = ({
       {/* Tenant Name & Property */}
       <Text style={styles.tenantName}>{tenant.name}</Text>
       <Text style={styles.propertyAddress}>{tenant.propertyAddress}</Text>
+
+      {/* Financial Breakdown Strip: Total Calculated, Total Paid, Rent Difference */}
+      <View style={styles.financialStrip}>
+        <View style={styles.finCol}>
+          <Text style={styles.finLabel}>Total Calculated</Text>
+          <Text style={styles.finValue}>₹{summary.totalNetExpected.toLocaleString()}</Text>
+        </View>
+        <View style={styles.finDivider} />
+        <View style={styles.finCol}>
+          <Text style={styles.finLabel}>Total Paid</Text>
+          <Text style={[styles.finValue, { color: '#047857' }]}>
+            ₹{summary.totalPaid.toLocaleString()}
+          </Text>
+        </View>
+        <View style={styles.finDivider} />
+        <View style={styles.finCol}>
+          <Text style={styles.finLabel}>Rent Difference</Text>
+          <Text
+            style={[
+              styles.finValue,
+              summary.rentDifference > 0
+                ? styles.textRed
+                : summary.rentDifference < 0
+                ? styles.textEmerald
+                : styles.textSlate,
+            ]}
+          >
+            {summary.rentDifference > 0
+              ? `Due: ₹${summary.dueAmount.toLocaleString()}`
+              : summary.rentDifference < 0
+              ? `Adv: ₹${summary.advanceAmount.toLocaleString()}`
+              : 'Cleared (₹0)'}
+          </Text>
+        </View>
+      </View>
 
       {/* Tags row */}
       <View style={styles.tagsContainer}>
@@ -112,7 +165,9 @@ export const TenantCard: React.FC<TenantCardProps> = ({
         </TouchableOpacity>
 
         <View style={styles.viewLedgerBtn}>
-          <Text style={styles.viewLedgerText}>Ledger</Text>
+          <Text style={styles.viewLedgerText}>
+            Ledger ({tenantPayments.length} entries)
+          </Text>
           <ChevronRight size={16} color="#64748B" />
         </View>
       </View>
@@ -140,6 +195,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
+  badgeGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   unitBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -153,6 +213,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#047857',
+  },
+  planBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  planBadgePurple: {
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  planBadgeSlate: {
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  planBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  planBadgeTextPurple: {
+    color: '#7C3AED',
+  },
+  planBadgeTextSlate: {
+    color: '#475569',
   },
   rentBadge: {
     flexDirection: 'row',
@@ -177,7 +265,47 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748B',
     marginTop: 2,
+    marginBottom: 10,
+  },
+  financialStrip: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     marginBottom: 12,
+  },
+  finCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  finLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+  },
+  finValue: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 2,
+  },
+  finDivider: {
+    width: 1,
+    backgroundColor: '#E2E8F0',
+    height: '100%',
+  },
+  textRed: {
+    color: '#DC2626',
+  },
+  textEmerald: {
+    color: '#059669',
+  },
+  textSlate: {
+    color: '#64748B',
   },
   tagsContainer: {
     flexDirection: 'row',

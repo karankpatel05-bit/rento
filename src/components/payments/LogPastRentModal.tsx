@@ -12,9 +12,10 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { X, Calendar, Calculator, Wrench, History, Check } from 'lucide-react-native';
+import { X, Calendar, Calculator, Wrench, History, Check, Sparkles, Scale } from 'lucide-react-native';
 import { Tenant, PaymentMode } from '../../types';
 import { useApp } from '../../context/AppContext';
+import { calculateTenantRentSummary, calculateNewerDues } from '../../utils/duesCalculator';
 
 interface LogPastRentModalProps {
   visible: boolean;
@@ -27,7 +28,10 @@ export const LogPastRentModal: React.FC<LogPastRentModalProps> = ({
   onClose,
   tenant,
 }) => {
-  const { logPayment } = useApp();
+  const { logPayment, payments } = useApp();
+
+  const isTenantFlexible = Boolean(tenant.isFlexiblePayer || tenant.paymentPlanType === 'flexible');
+  const [isFlexibleMode, setIsFlexibleMode] = useState<boolean>(isTenantFlexible);
 
   // Initialize fields for past rent logging
   const [monthYear, setMonthYear] = useState<string>('');
@@ -43,6 +47,17 @@ export const LogPastRentModal: React.FC<LogPastRentModalProps> = ({
   const numExpected = parseFloat(pastExpectedRent) || 0;
   const numDeduction = parseFloat(deductionAmount) || 0;
   const netExpectedPayout = Math.max(0, numExpected - (isMaintenanceDeducted ? numDeduction : 0));
+
+  // Cumulative snapshot prior to this past payment
+  const currentSummary = calculateTenantRentSummary(tenant, payments);
+
+  // Live calculation of newer dues after this payment
+  const numPaid = parseFloat(amountPaid) || 0;
+  const newerDues = calculateNewerDues(
+    currentSummary.rentDifference,
+    netExpectedPayout,
+    numPaid
+  );
 
   const handleReset = () => {
     setMonthYear('');
@@ -96,8 +111,12 @@ export const LogPastRentModal: React.FC<LogPastRentModalProps> = ({
         netPayoutReceived: netExpectedPayout > 0 ? netExpectedPayout : paid,
         amountPaid: paid,
         paymentMode,
-        remarks: remarks.trim() || 'Historical past month log',
-        status: paid >= netExpectedPayout ? 'paid' : 'partial',
+        remarks: remarks.trim() || (
+          isFlexibleMode
+            ? `Flexible past log of ₹${paid.toLocaleString()} (${newerDues.newerRemainingDue > 0 ? `₹${newerDues.newerRemainingDue.toLocaleString()} due` : 'cleared'})`
+            : 'Historical past month log'
+        ),
+        status: paid >= netExpectedPayout ? 'paid' : (paid > 0 ? 'partial' : 'pending'),
       });
       handleClose();
     } catch (err) {
@@ -140,6 +159,36 @@ export const LogPastRentModal: React.FC<LogPastRentModalProps> = ({
                 Use this to manually digitalize rent records from past months, physical notebook entries, or earlier bank statements.
               </Text>
             </View>
+
+            {/* Flexible Mode Switcher */}
+            <View style={styles.flexibleToggleRow}>
+              <TouchableOpacity
+                style={[
+                  styles.flexibleModeChip,
+                  isFlexibleMode ? styles.flexibleModeChipActive : styles.flexibleModeChipInactive,
+                ]}
+                onPress={() => setIsFlexibleMode(!isFlexibleMode)}
+                activeOpacity={0.8}
+              >
+                <Sparkles size={14} color={isFlexibleMode ? '#FFFFFF' : '#7C3AED'} />
+                <Text
+                  style={[
+                    styles.flexibleModeText,
+                    isFlexibleMode ? styles.flexibleModeTextActive : styles.flexibleModeTextInactive,
+                  ]}
+                >
+                  {isFlexibleMode ? 'Flexible Past Payment (Random Figure)' : 'Standard Past Month'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {isFlexibleMode && (
+              <View style={styles.flexibleNoticeBanner}>
+                <Text style={styles.flexibleNoticeText}>
+                  💡 <Text style={{ fontWeight: '700' }}>Flexible Old Payment:</Text> Log any random past figure given by the tenant. Cumulative dues will be recomputed automatically.
+                </Text>
+              </View>
+            )}
 
             {/* Billing Period Input */}
             <View style={styles.formGroup}>
@@ -197,6 +246,75 @@ export const LogPastRentModal: React.FC<LogPastRentModalProps> = ({
                   value={pastExpectedRent}
                   onChangeText={setPastExpectedRent}
                 />
+              </View>
+            </View>
+
+            {/* Live Cumulative Dues Impact Box */}
+            <View style={styles.duesPreviewCard}>
+              <View style={styles.duesHeader}>
+                <Scale size={16} color="#4338CA" />
+                <Text style={styles.duesHeaderTitle}>Cumulative Dues & Rent Difference</Text>
+              </View>
+
+              <View style={styles.duesGrid}>
+                <View style={styles.duesCol}>
+                  <Text style={styles.duesLabel}>Current Balance</Text>
+                  <Text
+                    style={[
+                      styles.duesValue,
+                      currentSummary.rentDifference > 0
+                        ? styles.textRed
+                        : currentSummary.rentDifference < 0
+                        ? styles.textEmerald
+                        : styles.textSlate,
+                    ]}
+                  >
+                    {currentSummary.rentDifference > 0
+                      ? `+₹${currentSummary.rentDifference.toLocaleString()}`
+                      : currentSummary.rentDifference < 0
+                      ? `-₹${Math.abs(currentSummary.rentDifference).toLocaleString()}`
+                      : '₹0'}
+                  </Text>
+                </View>
+
+                <View style={styles.duesCol}>
+                  <Text style={styles.duesLabel}>Expected</Text>
+                  <Text style={styles.duesValue}>+₹{netExpectedPayout.toLocaleString()}</Text>
+                </View>
+
+                <View style={styles.duesCol}>
+                  <Text style={styles.duesLabel}>Past Paid</Text>
+                  <Text style={[styles.duesValue, { color: '#047857' }]}>
+                    -₹{numPaid.toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.duesResultRow}>
+                <Text style={styles.duesResultLabel}>➔ Newer Balance After This Log:</Text>
+                <View
+                  style={[
+                    styles.duesBadge,
+                    newerDues.newerRemainingDue > 0 && styles.duesBadgeDue,
+                    newerDues.newerRemainingDue < 0 && styles.duesBadgeAdvance,
+                    newerDues.newerRemainingDue === 0 && styles.duesBadgeSettled,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.duesBadgeText,
+                      newerDues.newerRemainingDue > 0 && styles.duesBadgeTextDue,
+                      newerDues.newerRemainingDue < 0 && styles.duesBadgeTextAdvance,
+                      newerDues.newerRemainingDue === 0 && styles.duesBadgeTextSettled,
+                    ]}
+                  >
+                    {newerDues.newerRemainingDue > 0
+                      ? `Pending Due: ₹${newerDues.newerDueAmount.toLocaleString()}`
+                      : newerDues.newerRemainingDue < 0
+                      ? `Advance Credit: ₹${newerDues.newerAdvanceAmount.toLocaleString()}`
+                      : 'All Cleared (₹0)'}
+                  </Text>
+                </View>
               </View>
             </View>
 
@@ -567,5 +685,145 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  flexibleToggleRow: {
+    marginBottom: 12,
+  },
+  flexibleModeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+  },
+  flexibleModeChipActive: {
+    backgroundColor: '#7C3AED',
+  },
+  flexibleModeChipInactive: {
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  flexibleModeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  flexibleModeTextActive: {
+    color: '#FFFFFF',
+  },
+  flexibleModeTextInactive: {
+    color: '#7C3AED',
+  },
+  flexibleNoticeBanner: {
+    backgroundColor: '#FAF5FF',
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  flexibleNoticeText: {
+    fontSize: 12,
+    color: '#6B21A8',
+    lineHeight: 18,
+  },
+  duesPreviewCard: {
+    backgroundColor: '#EEF2FF',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+    padding: 14,
+    marginBottom: 18,
+  },
+  duesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  duesHeaderTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#3730A3',
+  },
+  duesGrid: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+  },
+  duesCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  duesLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+  },
+  duesValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginTop: 2,
+  },
+  duesResultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E7FF',
+  },
+  duesResultLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#312E81',
+  },
+  duesBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  duesBadgeDue: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  duesBadgeAdvance: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  duesBadgeSettled: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  duesBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  duesBadgeTextDue: {
+    color: '#DC2626',
+  },
+  duesBadgeTextAdvance: {
+    color: '#059669',
+  },
+  duesBadgeTextSettled: {
+    color: '#16A34A',
+  },
+  textRed: {
+    color: '#DC2626',
+  },
+  textEmerald: {
+    color: '#059669',
+  },
+  textSlate: {
+    color: '#475569',
   },
 });

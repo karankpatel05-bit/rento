@@ -16,6 +16,9 @@ import {
   CheckCircle,
   Users,
   RotateCcw,
+  Sparkles,
+  Scale,
+  AlertCircle,
 } from 'lucide-react-native';
 import { useApp } from '../context/AppContext';
 import { Tenant } from '../types';
@@ -23,6 +26,7 @@ import { TenantCard } from '../components/tenants/TenantCard';
 import { MayReminderBanner } from '../components/alerts/MayReminderBanner';
 import { LogPaymentModal } from '../components/payments/LogPaymentModal';
 import { TenantOnboardingModal } from '../components/tenants/TenantOnboardingModal';
+import { calculatePropertyOverviewSummary } from '../utils/duesCalculator';
 
 interface DashboardScreenProps {
   onSelectTenant: (tenant: Tenant) => void;
@@ -39,25 +43,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'variable' | 'standard'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'flexible' | 'fixed' | 'variable'>('all');
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
   const [selectedTenantForPayment, setSelectedTenantForPayment] = useState<Tenant | null>(null);
 
-  // Financial calculations
-  const totalExpectedRent = useMemo(() => {
-    return tenants.reduce((sum, t) => sum + (t.active ? t.rentAmount : 0), 0);
-  }, [tenants]);
-
-  const totalDeductions = useMemo(() => {
-    return payments.reduce(
-      (sum, p) => sum + (p.isMaintenanceDeducted ? p.maintenanceDeductionAmount : 0),
-      0
-    );
-  }, [payments]);
-
-  const totalCollected = useMemo(() => {
-    return payments.reduce((sum, p) => sum + p.amountPaid, 0);
-  }, [payments]);
+  // Financial calculations across all properties
+  const portfolio = useMemo(() => {
+    return calculatePropertyOverviewSummary(tenants, payments);
+  }, [tenants, payments]);
 
   // Filtered tenants list
   const filteredTenants = useMemo(() => {
@@ -69,11 +62,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
       if (!matchesSearch) return false;
 
+      if (activeFilter === 'flexible') {
+        return Boolean(tenant.isFlexiblePayer || tenant.paymentPlanType === 'flexible');
+      }
+      if (activeFilter === 'fixed') {
+        return !tenant.isFlexiblePayer && tenant.paymentPlanType !== 'flexible';
+      }
       if (activeFilter === 'variable') {
         return tenant.maintenanceWorkflow === 'variable_rent_deduction';
-      }
-      if (activeFilter === 'standard') {
-        return tenant.maintenanceWorkflow === 'standard';
       }
       return true;
     });
@@ -89,8 +85,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         <View style={styles.metricsContainer}>
           <View style={[styles.metricCard, styles.metricCardPrimary]}>
             <Text style={styles.metricLabel}>Expected Monthly Rent</Text>
-            <Text style={styles.metricValue}>₹{totalExpectedRent.toLocaleString()}</Text>
-            <Text style={styles.metricSub}>{tenants.length} Active Properties</Text>
+            <Text style={styles.metricValue}>₹{portfolio.totalExpectedMonthly.toLocaleString()}</Text>
+            <Text style={styles.metricSub}>
+              {tenants.length} Properties • {portfolio.totalFlexibleTenants} Flexible Payers
+            </Text>
           </View>
 
           <View style={styles.metricsRow}>
@@ -100,20 +98,35 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <Text style={styles.metricMiniLabel}>Total Collected</Text>
               </View>
               <Text style={styles.metricMiniValue}>
-                ₹{totalCollected.toLocaleString()}
+                ₹{portfolio.totalCollected.toLocaleString()}
               </Text>
             </View>
 
-            <View style={[styles.metricCardMini, styles.metricCardAmber]}>
+            <View style={[styles.metricCardMini, styles.metricCardIndigo]}>
               <View style={styles.miniLabelRow}>
-                <Wrench size={14} color="#B45309" />
-                <Text style={styles.metricMiniLabel}>Maint. Deductions</Text>
+                <Scale size={14} color="#4338CA" />
+                <Text style={styles.metricMiniLabel}>Rent Calculated</Text>
               </View>
-              <Text style={styles.metricMiniValueAmber}>
-                -₹{totalDeductions.toLocaleString()}
+              <Text style={styles.metricMiniValueIndigo}>
+                ₹{portfolio.totalCalculatedRent.toLocaleString()}
               </Text>
             </View>
           </View>
+
+          {/* Outstanding Dues Banner if any difference exists */}
+          {portfolio.totalOutstandingDues > 0 && (
+            <View style={styles.duesOverviewBanner}>
+              <AlertCircle size={16} color="#DC2626" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.duesOverviewTitle}>
+                  Pending Rent Dues Across Properties
+                </Text>
+                <Text style={styles.duesOverviewSub}>
+                  Total Difference: ₹{portfolio.totalOutstandingDues.toLocaleString()} remaining to be collected.
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Search and Filters */}
@@ -150,6 +163,44 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             <TouchableOpacity
               style={[
                 styles.chip,
+                activeFilter === 'flexible' && styles.chipActivePurple,
+              ]}
+              onPress={() => setActiveFilter('flexible')}
+            >
+              <Sparkles
+                size={12}
+                color={activeFilter === 'flexible' ? '#FFFFFF' : '#7C3AED'}
+              />
+              <Text
+                style={[
+                  styles.chipText,
+                  activeFilter === 'flexible' && styles.chipTextActivePurple,
+                ]}
+              >
+                Flexible ({portfolio.totalFlexibleTenants})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.chip,
+                activeFilter === 'fixed' && styles.chipActive,
+              ]}
+              onPress={() => setActiveFilter('fixed')}
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  activeFilter === 'fixed' && styles.chipTextActive,
+                ]}
+              >
+                Fixed ({portfolio.totalFixedTenants})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.chip,
                 activeFilter === 'variable' && styles.chipActive,
               ]}
               onPress={() => setActiveFilter('variable')}
@@ -161,23 +212,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 ]}
               >
                 Variable Maint. ({tenants.filter((t) => t.maintenanceWorkflow === 'variable_rent_deduction').length})
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.chip,
-                activeFilter === 'standard' && styles.chipActive,
-              ]}
-              onPress={() => setActiveFilter('standard')}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  activeFilter === 'standard' && styles.chipTextActive,
-                ]}
-              >
-                Standard ({tenants.filter((t) => t.maintenanceWorkflow === 'standard').length})
               </Text>
             </TouchableOpacity>
           </View>
@@ -311,6 +345,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#ECFDF5',
     borderColor: '#A7F3D0',
   },
+  metricCardIndigo: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#C7D2FE',
+  },
   metricCardAmber: {
     backgroundColor: '#FFFBEB',
     borderColor: '#FDE68A',
@@ -331,11 +369,38 @@ const styles = StyleSheet.create({
     color: '#047857',
     marginTop: 4,
   },
+  metricMiniValueIndigo: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#4338CA',
+    marginTop: 4,
+  },
   metricMiniValueAmber: {
     fontSize: 18,
     fontWeight: '800',
     color: '#B45309',
     marginTop: 4,
+  },
+  duesOverviewBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 14,
+    padding: 12,
+    gap: 10,
+    marginTop: 10,
+  },
+  duesOverviewTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#991B1B',
+  },
+  duesOverviewSub: {
+    fontSize: 12,
+    color: '#B91C1C',
+    marginTop: 2,
   },
   searchSection: {
     marginBottom: 16,
@@ -373,12 +438,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F172A',
     borderColor: '#0F172A',
   },
+  chipActivePurple: {
+    backgroundColor: '#7C3AED',
+    borderColor: '#7C3AED',
+  },
   chipText: {
     fontSize: 12,
     fontWeight: '600',
     color: '#64748B',
   },
   chipTextActive: {
+    color: '#FFFFFF',
+  },
+  chipTextActivePurple: {
     color: '#FFFFFF',
   },
   sectionHeader: {

@@ -17,15 +17,36 @@ export const PdfGenerator = {
       const totalAdditional = additionalDeposits.reduce((sum, d) => sum + d.amount, 0);
       const totalSecurityDeposit = initialDeposit + totalAdditional;
 
+      const isFlexiblePayer = Boolean(
+        tenant.isFlexiblePayer || tenant.paymentPlanType === 'flexible'
+      );
       const totalCollected = payments.reduce((sum, p) => sum + p.amountPaid, 0);
       const totalDeductions = payments.reduce(
         (sum, p) => sum + (p.isMaintenanceDeducted ? p.maintenanceDeductionAmount : 0),
         0
       );
+      const totalNetCalculated = payments.reduce(
+        (sum, p) =>
+          sum + (p.isMaintenanceDeducted ? p.netPayoutReceived : p.expectedRent),
+        0
+      );
+      const rentDifference = totalNetCalculated - totalCollected;
 
       const paymentsRowsHtml = payments
         .map(
-          (p, idx) => `
+          (p, idx) => {
+            const netExpected = p.isMaintenanceDeducted
+              ? p.netPayoutReceived
+              : p.expectedRent;
+            const diff = p.amountPaid - netExpected;
+            const diffHtml =
+              diff === 0
+                ? `<span style="color: #047857; font-weight: bold;">₹0 (Settled)</span>`
+                : diff > 0
+                ? `<span style="color: #1D4ED8; font-weight: bold;">+₹${diff.toLocaleString()} (Adv)</span>`
+                : `<span style="color: #DC2626; font-weight: bold;">-₹${Math.abs(diff).toLocaleString()} (Due)</span>`;
+
+            return `
           <tr style="background-color: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
             <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; font-weight: 600;">${p.monthYear}</td>
             <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; color: #475569;">${p.paymentDate}</td>
@@ -45,11 +66,15 @@ export const PdfGenerator = {
             <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-weight: bold; color: #047857;">
               ₹${p.amountPaid.toLocaleString()}
             </td>
+            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-size: 11px;">
+              ${diffHtml}
+            </td>
             <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; font-size: 11px; color: #475569;">
               ${p.remarks || '—'}
             </td>
           </tr>
-        `
+        `;
+          }
         )
         .join('');
 
@@ -79,15 +104,16 @@ export const PdfGenerator = {
             body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 30px; color: #0F172A; }
             .header-table { width: 100%; margin-bottom: 24px; border-bottom: 2px solid #059669; padding-bottom: 16px; }
             .badge { background-color: #ECFDF5; color: #047857; padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 12px; }
+            .badge-purple { background-color: #EDE9FE; color: #6D28D9; padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 12px; }
             .info-grid { display: flex; width: 100%; margin-bottom: 20px; }
             .info-col { flex: 1; background: #F8FAFC; padding: 14px; border-radius: 8px; border: 1px solid #E2E8F0; margin-right: 12px; }
             .info-col:last-child { margin-right: 0; }
             .info-label { font-size: 11px; text-transform: uppercase; color: #64748B; font-weight: bold; margin-bottom: 4px; }
             .info-value { font-size: 16px; font-weight: bold; color: #0F172A; }
             .info-sub { font-size: 12px; color: #64748B; margin-top: 2px; }
-            table.data-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13px; }
+            table.data-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12px; }
             table.data-table th { background-color: #0F172A; color: #FFFFFF; padding: 10px; text-align: left; font-size: 11px; text-transform: uppercase; }
-            .summary-box { background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 14px; margin-top: 20px; display: flex; justify-content: space-between; align-items: center; }
+            .summary-box { background: #F8FAFC; border: 1.5px solid #CBD5E1; border-radius: 8px; padding: 16px; margin-top: 20px; display: flex; justify-content: space-between; align-items: center; }
             .footer-note { margin-top: 30px; text-align: center; font-size: 11px; color: #94A3B8; border-top: 1px solid #F1F5F9; padding-top: 12px; }
           </style>
         </head>
@@ -99,7 +125,9 @@ export const PdfGenerator = {
                 <p style="margin: 4px 0 0 0; color: #64748B; font-size: 13px;">Official Tenant Ledger & Statement of Account</p>
               </td>
               <td style="text-align: right;">
-                <span class="badge">ACTIVE LEASE</span>
+                <span class="${isFlexiblePayer ? 'badge-purple' : 'badge'}">${
+                  isFlexiblePayer ? 'FLEXIBLE PAYER' : 'FIXED PAYER'
+                }</span>
                 <p style="margin: 6px 0 0 0; font-size: 12px; color: #64748B;">Generated: ${new Date().toLocaleDateString('en-GB')}</p>
               </td>
             </tr>
@@ -117,6 +145,11 @@ export const PdfGenerator = {
             <div class="info-col">
               <div class="info-label">Rent & Escalation</div>
               <div class="info-value">₹${tenant.rentAmount.toLocaleString()} / mo</div>
+              <div class="info-sub">Plan: ${
+                isFlexiblePayer
+                  ? 'Flexible (Custom / Irregular Dues)'
+                  : 'Fixed (Standard Recurring)'
+              }</div>
               <div class="info-sub">Escalation: +${tenant.rentIncrement.value}${
                 tenant.rentIncrement.type === 'percentage' ? '%' : '₹'
               } / yr</div>
@@ -173,6 +206,7 @@ export const PdfGenerator = {
                 <th style="text-align: right;">Gross Rent</th>
                 <th style="text-align: right;">Maint. Deducted</th>
                 <th style="text-align: right;">Amount Paid</th>
+                <th style="text-align: right;">Diff / Bal</th>
                 <th>Remarks</th>
               </tr>
             </thead>
@@ -180,7 +214,7 @@ export const PdfGenerator = {
               ${
                 payments.length > 0
                   ? paymentsRowsHtml
-                  : '<tr><td colspan="7" style="padding: 20px; text-align: center; color: #94A3B8;">No payment records recorded yet.</td></tr>'
+                  : '<tr><td colspan="8" style="padding: 20px; text-align: center; color: #94A3B8;">No payment records recorded yet.</td></tr>'
               }
             </tbody>
           </table>
@@ -188,22 +222,32 @@ export const PdfGenerator = {
           <!-- Summary Box -->
           <div class="summary-box">
             <div>
-              <span style="font-size: 12px; color: #065F46; font-weight: bold;">TOTAL RENT COLLECTED</span>
-              <div style="font-size: 22px; font-weight: 800; color: #047857;">₹${totalCollected.toLocaleString()}</div>
+              <span style="font-size: 11px; color: #4338CA; font-weight: bold;">TOTAL CALCULATED RENT</span>
+              <div style="font-size: 20px; font-weight: 800; color: #3730A3;">₹${totalNetCalculated.toLocaleString()}</div>
             </div>
-            ${
-              totalDeductions > 0
-                ? `
-              <div>
-                <span style="font-size: 12px; color: #991B1B; font-weight: bold;">TOTAL MAINTENANCE DEDUCTED</span>
-                <div style="font-size: 18px; font-weight: 700; color: #DC2626;">-₹${totalDeductions.toLocaleString()}</div>
-              </div>
-            `
-                : ''
-            }
             <div>
-              <span style="font-size: 12px; color: #065F46; font-weight: bold;">TOTAL SECURITY DEPOSIT HELD</span>
-              <div style="font-size: 20px; font-weight: 800; color: #065F46;">₹${totalSecurityDeposit.toLocaleString()}</div>
+              <span style="font-size: 11px; color: #065F46; font-weight: bold;">TOTAL RENT COLLECTED</span>
+              <div style="font-size: 20px; font-weight: 800; color: #047857;">₹${totalCollected.toLocaleString()}</div>
+            </div>
+            <div>
+              <span style="font-size: 11px; color: ${
+                rentDifference > 0 ? '#991B1B' : rentDifference < 0 ? '#1E40AF' : '#065F46'
+              }; font-weight: bold;">RENT DIFFERENCE</span>
+              <div style="font-size: 20px; font-weight: 800; color: ${
+                rentDifference > 0 ? '#DC2626' : rentDifference < 0 ? '#2563EB' : '#059669'
+              };">
+                ${
+                  rentDifference > 0
+                    ? `Due: ₹${rentDifference.toLocaleString()}`
+                    : rentDifference < 0
+                    ? `Adv: ₹${Math.abs(rentDifference).toLocaleString()}`
+                    : '₹0 (Settled)'
+                }
+              </div>
+            </div>
+            <div>
+              <span style="font-size: 11px; color: #92400E; font-weight: bold;">SECURITY DEPOSIT</span>
+              <div style="font-size: 20px; font-weight: 800; color: #B45309;">₹${totalSecurityDeposit.toLocaleString()}</div>
             </div>
           </div>
 

@@ -24,6 +24,9 @@ import {
   ShieldCheck,
   FileDown,
   History,
+  Sparkles,
+  Scale,
+  RefreshCw,
 } from 'lucide-react-native';
 import { Tenant, PaymentRecord, InterestCollectionRecord } from '../types';
 import { useApp } from '../context/AppContext';
@@ -32,6 +35,7 @@ import { LogInterestModal } from '../components/tenants/LogInterestModal';
 import { LogAdditionalDepositModal } from '../components/tenants/LogAdditionalDepositModal';
 import { LogPastRentModal } from '../components/payments/LogPastRentModal';
 import { PdfGenerator } from '../services/pdfGenerator';
+import { calculateTenantRentSummary } from '../utils/duesCalculator';
 
 interface TenantDetailScreenProps {
   tenant: Tenant;
@@ -46,6 +50,7 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
     tenants,
     payments,
     interestCollections,
+    updateTenant,
     triggerTestMayNotification,
   } = useApp();
 
@@ -62,6 +67,28 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
   // Filter payments & interests for this tenant
   const tenantPayments = payments.filter((p) => p.tenantId === activeTenant.id);
   const tenantInterests = interestCollections.filter((ic) => ic.tenantId === activeTenant.id);
+
+  // Financial summary & flexible calculation
+  const isFlexible = Boolean(
+    activeTenant.isFlexiblePayer || activeTenant.paymentPlanType === 'flexible'
+  );
+  const rentSummary = calculateTenantRentSummary(activeTenant, payments);
+
+  const handleTogglePaymentPlan = async () => {
+    const nextPlan = !isFlexible;
+    const updated: Tenant = {
+      ...activeTenant,
+      isFlexiblePayer: nextPlan,
+      paymentPlanType: nextPlan ? 'flexible' : 'fixed',
+    };
+    await updateTenant(updated);
+    Alert.alert(
+      'Payment Plan Updated',
+      nextPlan
+        ? `${activeTenant.name} is now set as a Flexible Payer. Irregular or random payments balance cumulatively, and newer dues are computed automatically.`
+        : `${activeTenant.name} is now set as a Standard Fixed Payer.`
+    );
+  };
 
   // Security deposit calculations
   const initialDeposit = activeTenant.securityDeposit || 0;
@@ -217,6 +244,127 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
                   : 'Tenant settles maintenance charges separately with the society.'}
               </Text>
             </View>
+          </View>
+        </View>
+
+        {/* FINANCIAL SUMMARY & RENT DIFFERENCE CARD */}
+        <View style={[styles.financeCard, isFlexible && styles.financeCardFlexible]}>
+          <View style={styles.financeHeader}>
+            <View style={styles.financeHeaderLeft}>
+              <View
+                style={[
+                  styles.planTypeBadge,
+                  isFlexible ? styles.planTypeBadgeFlexible : styles.planTypeBadgeFixed,
+                ]}
+              >
+                {isFlexible ? (
+                  <Sparkles size={14} color="#7C3AED" />
+                ) : (
+                  <Calendar size={14} color="#0284C7" />
+                )}
+                <Text
+                  style={[
+                    styles.planTypeText,
+                    isFlexible ? styles.planTypeTextFlexible : styles.planTypeTextFixed,
+                  ]}
+                >
+                  {isFlexible ? 'Flexible Payer (Custom Dues)' : 'Fixed Payer (Standard Monthly)'}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.switchPlanBtn}
+              onPress={handleTogglePaymentPlan}
+              activeOpacity={0.8}
+            >
+              <RefreshCw size={13} color="#4F46E5" />
+              <Text style={styles.switchPlanBtnText}>
+                {isFlexible ? 'Switch to Fixed' : 'Switch to Flexible'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* 3 Metrics Strip */}
+          <View style={styles.financeMetricsGrid}>
+            {/* Total Calculated */}
+            <View style={styles.financeMetricBox}>
+              <Text style={styles.financeMetricLabel}>Total Calculated</Text>
+              <Text style={styles.financeMetricValue}>
+                ₹{rentSummary.totalNetExpected.toLocaleString()}
+              </Text>
+              <Text style={styles.financeMetricSub}>
+                {tenantPayments.length} entries billed
+              </Text>
+            </View>
+
+            {/* Total Paid */}
+            <View style={styles.financeMetricBox}>
+              <Text style={styles.financeMetricLabel}>Total Paid</Text>
+              <Text style={[styles.financeMetricValue, { color: '#059669' }]}>
+                ₹{rentSummary.totalPaid.toLocaleString()}
+              </Text>
+              <Text style={styles.financeMetricSub}>Collected</Text>
+            </View>
+
+            {/* Rent Difference */}
+            <View
+              style={[
+                styles.financeMetricBox,
+                rentSummary.status === 'due' && styles.metricBoxDue,
+                rentSummary.status === 'advance' && styles.metricBoxAdvance,
+                rentSummary.status === 'settled' && styles.metricBoxSettled,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.financeMetricLabel,
+                  rentSummary.status === 'due' && { color: '#B91C1C' },
+                  rentSummary.status === 'advance' && { color: '#1D4ED8' },
+                  rentSummary.status === 'settled' && { color: '#047857' },
+                ]}
+              >
+                Rent Difference
+              </Text>
+              <Text
+                style={[
+                  styles.financeMetricValue,
+                  rentSummary.status === 'due' && { color: '#DC2626' },
+                  rentSummary.status === 'advance' && { color: '#2563EB' },
+                  rentSummary.status === 'settled' && { color: '#059669' },
+                ]}
+              >
+                {rentSummary.status === 'due'
+                  ? `Due: ₹${rentSummary.dueAmount.toLocaleString()}`
+                  : rentSummary.status === 'advance'
+                  ? `Adv: ₹${rentSummary.advanceAmount.toLocaleString()}`
+                  : '₹0 (Settled)'}
+              </Text>
+              <Text
+                style={[
+                  styles.financeMetricSub,
+                  rentSummary.status === 'due' && { color: '#EF4444' },
+                  rentSummary.status === 'advance' && { color: '#3B82F6' },
+                  rentSummary.status === 'settled' && { color: '#10B981' },
+                ]}
+              >
+                {rentSummary.status === 'due'
+                  ? 'Pending collection'
+                  : rentSummary.status === 'advance'
+                  ? 'Prepaid credit'
+                  : 'All balance cleared'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Footnote Explanation */}
+          <View style={styles.planExplanationBox}>
+            <Scale size={13} color="#64748B" />
+            <Text style={styles.planExplanationText}>
+              {isFlexible
+                ? 'Flexible Payer Mode: Tenant makes non-fixed or random payments. All payments are summed and balanced against calculated rents to continuously compute newer dues.'
+                : 'Fixed Payer Mode: Rent is expected on a fixed recurring monthly schedule.'}
+            </Text>
           </View>
         </View>
 
@@ -466,6 +614,42 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
                       </Text>
                     </View>
                   )}
+
+                  {/* Rent Difference Breakdown for this payment entry */}
+                  {(() => {
+                    const netExpected = payment.isMaintenanceDeducted
+                      ? payment.netPayoutReceived
+                      : payment.expectedRent;
+                    const diff = payment.amountPaid - netExpected;
+                    return (
+                      <View style={styles.entryDiffRow}>
+                        <View style={styles.entryDiffCol}>
+                          <Text style={styles.entryDiffLabel}>Calculated Rent</Text>
+                          <Text style={styles.entryDiffVal}>₹{netExpected.toLocaleString()}</Text>
+                        </View>
+                        <View style={styles.entryDiffCol}>
+                          <Text style={styles.entryDiffLabel}>Paid Received</Text>
+                          <Text style={styles.entryDiffValPaid}>₹{payment.amountPaid.toLocaleString()}</Text>
+                        </View>
+                        <View style={styles.entryDiffColRight}>
+                          <Text style={styles.entryDiffLabel}>Entry Balance</Text>
+                          {diff === 0 ? (
+                            <View style={[styles.entryDiffBadge, styles.entryDiffZeroBadge]}>
+                              <Text style={styles.entryDiffZeroText}>Exact (₹0)</Text>
+                            </View>
+                          ) : diff > 0 ? (
+                            <View style={[styles.entryDiffBadge, styles.entryDiffAdvBadge]}>
+                              <Text style={styles.entryDiffAdvText}>+₹{diff.toLocaleString()} (Adv)</Text>
+                            </View>
+                          ) : (
+                            <View style={[styles.entryDiffBadge, styles.entryDiffDueBadge]}>
+                              <Text style={styles.entryDiffDueText}>-₹{Math.abs(diff).toLocaleString()} (Due)</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })()}
 
                   {/* Remarks / Notes */}
                   {payment.remarks ? (
@@ -1252,5 +1436,196 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#059669',
+  },
+  financeCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  financeCardFlexible: {
+    borderColor: '#DDD6FE',
+    backgroundColor: '#FAF5FF',
+  },
+  financeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  financeHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  planTypeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  planTypeBadgeFlexible: {
+    backgroundColor: '#EDE9FE',
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+  },
+  planTypeBadgeFixed: {
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  planTypeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  planTypeTextFlexible: {
+    color: '#6D28D9',
+  },
+  planTypeTextFixed: {
+    color: '#0369A1',
+  },
+  switchPlanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  switchPlanBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4338CA',
+  },
+  financeMetricsGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  financeMetricBox: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  metricBoxDue: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  metricBoxAdvance: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  metricBoxSettled: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  financeMetricLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748B',
+    textTransform: 'uppercase',
+  },
+  financeMetricValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 3,
+  },
+  financeMetricSub: {
+    fontSize: 10,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  planExplanationBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  planExplanationText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#475569',
+    lineHeight: 15,
+  },
+  entryDiffRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  entryDiffCol: {
+    flex: 1,
+  },
+  entryDiffColRight: {
+    alignItems: 'flex-end',
+  },
+  entryDiffLabel: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  entryDiffVal: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  entryDiffValPaid: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  entryDiffBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  entryDiffZeroBadge: {
+    backgroundColor: '#ECFDF5',
+  },
+  entryDiffZeroText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#047857',
+  },
+  entryDiffDueBadge: {
+    backgroundColor: '#FEF2F2',
+  },
+  entryDiffDueText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  entryDiffAdvBadge: {
+    backgroundColor: '#EFF6FF',
+  },
+  entryDiffAdvText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2563EB',
   },
 });

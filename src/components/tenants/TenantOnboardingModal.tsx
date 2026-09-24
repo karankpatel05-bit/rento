@@ -43,6 +43,7 @@ export const TenantOnboardingModal: React.FC<TenantOnboardingModalProps> = ({
   const [propertyAddress, setPropertyAddress] = useState<string>('');
   const [unitDesignation, setUnitDesignation] = useState<string>('');
   const [rentAmount, setRentAmount] = useState<string>('');
+  const [paymentPlanType, setPaymentPlanType] = useState<'fixed' | 'flexible'>('fixed');
   const [securityDeposit, setSecurityDeposit] = useState<string>('');
   const [incrementType, setIncrementType] = useState<'percentage' | 'fixed'>('percentage');
   const [incrementValue, setIncrementValue] = useState<string>('');
@@ -65,6 +66,7 @@ export const TenantOnboardingModal: React.FC<TenantOnboardingModalProps> = ({
     setPropertyAddress('');
     setUnitDesignation('');
     setRentAmount('');
+    setPaymentPlanType('fixed');
     setSecurityDeposit('');
     setIncrementValue('');
     setIncrementNotes('');
@@ -91,6 +93,8 @@ export const TenantOnboardingModal: React.FC<TenantOnboardingModalProps> = ({
           propertyAddress: propertyAddress.trim(),
           unitDesignation: unitDesignation.trim() || 'Unit 1',
           rentAmount: parseFloat(rentAmount) || 0,
+          isFlexiblePayer: paymentPlanType === 'flexible',
+          paymentPlanType,
           securityDeposit: parseFloat(securityDeposit) || 0,
           additionalDeposits: [],
           rentIncrement: {
@@ -209,6 +213,53 @@ export const TenantOnboardingModal: React.FC<TenantOnboardingModalProps> = ({
                       onChangeText={setRentAmount}
                     />
                   </View>
+                </View>
+
+                {/* Payment Plan Type: Fixed Monthly vs Flexible Random Payers */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.inputLabel}>Payment Plan Type</Text>
+                  <View style={styles.segmentedControl}>
+                    <TouchableOpacity
+                      style={[
+                        styles.segmentBtn,
+                        paymentPlanType === 'fixed' && styles.segmentBtnActive,
+                      ]}
+                      onPress={() => setPaymentPlanType('fixed')}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.segmentBtnText,
+                          paymentPlanType === 'fixed' && styles.segmentBtnTextActive,
+                        ]}
+                      >
+                        Fixed Payer (Standard)
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.segmentBtn,
+                        paymentPlanType === 'flexible' && styles.segmentBtnActivePurple,
+                      ]}
+                      onPress={() => setPaymentPlanType('flexible')}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.segmentBtnText,
+                          paymentPlanType === 'flexible' && styles.segmentBtnTextActivePurple,
+                        ]}
+                      >
+                        Flexible Payer (Random)
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.fieldHint}>
+                    {paymentPlanType === 'flexible'
+                      ? 'Tenant pays irregular or random amounts. Rento calculates Total Rent Due vs Total Paid and tracks Rent Difference automatically.'
+                      : 'Tenant pays standard fixed rent on a regular monthly schedule.'}
+                  </Text>
                 </View>
 
                 {/* Existing / Initial Security Deposit Taken from Tenant */}
@@ -622,6 +673,18 @@ const styles = StyleSheet.create({
   },
   segmentBtnTextActive: {
     color: '#0F172A',
+    fontWeight: '700',
+  },
+  segmentBtnActivePurple: {
+    backgroundColor: '#7C3AED',
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  segmentBtnTextActivePurple: {
+    color: '#FFFFFF',
     fontWeight: '700',
   },
   workflowCard: {

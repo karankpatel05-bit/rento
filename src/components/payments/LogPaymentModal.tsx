@@ -11,9 +11,10 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { X, CheckCircle, Calculator, Wrench, IndianRupee } from 'lucide-react-native';
+import { X, CheckCircle, Calculator, Wrench, IndianRupee, Sparkles, Scale } from 'lucide-react-native';
 import { Tenant, PaymentMode } from '../../types';
 import { useApp } from '../../context/AppContext';
+import { calculateTenantRentSummary, calculateNewerDues } from '../../utils/duesCalculator';
 
 interface LogPaymentModalProps {
   visible: boolean;
@@ -26,10 +27,13 @@ export const LogPaymentModal: React.FC<LogPaymentModalProps> = ({
   onClose,
   tenant,
 }) => {
-  const { logPayment } = useApp();
+  const { logPayment, payments } = useApp();
 
   const now = new Date();
   const currentMonthYear = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+  const isTenantFlexible = Boolean(tenant.isFlexiblePayer || tenant.paymentPlanType === 'flexible');
+  const [isFlexibleMode, setIsFlexibleMode] = useState<boolean>(isTenantFlexible);
 
   const [monthYear, setMonthYear] = useState<string>(currentMonthYear);
   const [paymentDate, setPaymentDate] = useState<string>(
@@ -48,13 +52,25 @@ export const LogPaymentModal: React.FC<LogPaymentModalProps> = ({
   const numDeduction = parseFloat(deductionAmount) || 0;
   const netExpectedPayout = Math.max(0, rentAmount - (isMaintenanceDeducted ? numDeduction : 0));
 
-  // Pre-fill amount paid to net expected payout if user hasn't explicitly entered a custom partial amount
+  // Cumulative snapshot prior to this payment
+  const currentSummary = calculateTenantRentSummary(tenant, payments);
+
+  // Live calculation of newer dues after this payment
+  const numPaid = parseFloat(amountPaid) || 0;
+  const newerDues = calculateNewerDues(
+    currentSummary.rentDifference,
+    netExpectedPayout,
+    numPaid
+  );
+
+  // Pre-fill amount paid for fixed payers; allow blank/custom for flexible
   useEffect(() => {
     if (visible) {
+      setIsFlexibleMode(isTenantFlexible);
       const defaultNet = rentAmount - (isMaintenanceDeducted ? numDeduction : 0);
       setAmountPaid(defaultNet.toString());
     }
-  }, [visible, isMaintenanceDeducted, deductionAmount, rentAmount]);
+  }, [visible, isTenantFlexible, isMaintenanceDeducted, deductionAmount, rentAmount]);
 
   const handleSubmit = async () => {
     const paid = parseFloat(amountPaid) || 0;
@@ -75,8 +91,14 @@ export const LogPaymentModal: React.FC<LogPaymentModalProps> = ({
         netPayoutReceived: netExpectedPayout,
         amountPaid: paid,
         paymentMode,
-        remarks: remarks.trim() || (isMaintenanceDeducted ? `Variable maintenance ₹${numDeduction} deducted` : 'Regular rent received'),
-        status: paid >= netExpectedPayout ? 'paid' : 'partial',
+        remarks: remarks.trim() || (
+          isFlexibleMode
+            ? `Flexible payment of ₹${paid.toLocaleString()} (${newerDues.newerRemainingDue > 0 ? `₹${newerDues.newerRemainingDue.toLocaleString()} due` : 'cleared'})`
+            : isMaintenanceDeducted
+            ? `Variable maintenance ₹${numDeduction} deducted`
+            : 'Regular rent received'
+        ),
+        status: paid >= netExpectedPayout ? 'paid' : (paid > 0 ? 'partial' : 'pending'),
       });
       onClose();
     } catch (err) {
@@ -107,6 +129,36 @@ export const LogPaymentModal: React.FC<LogPaymentModalProps> = ({
           </View>
 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+            {/* Flexible Payer Mode Banner / Switch */}
+            <View style={styles.flexibleToggleRow}>
+              <TouchableOpacity
+                style={[
+                  styles.flexibleModeChip,
+                  isFlexibleMode ? styles.flexibleModeChipActive : styles.flexibleModeChipInactive,
+                ]}
+                onPress={() => setIsFlexibleMode(!isFlexibleMode)}
+                activeOpacity={0.8}
+              >
+                <Sparkles size={14} color={isFlexibleMode ? '#FFFFFF' : '#7C3AED'} />
+                <Text
+                  style={[
+                    styles.flexibleModeText,
+                    isFlexibleMode ? styles.flexibleModeTextActive : styles.flexibleModeTextInactive,
+                  ]}
+                >
+                  {isFlexibleMode ? 'Flexible Payer (Random Figures)' : 'Enable Flexible / Random Figure Mode'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {isFlexibleMode && (
+              <View style={styles.flexibleNoticeBanner}>
+                <Text style={styles.flexibleNoticeText}>
+                  💡 <Text style={{ fontWeight: '700' }}>Flexible Mode:</Text> Enter any custom/random amount below. Total rent calculated, total paid, and newer dues are updated automatically.
+                </Text>
+              </View>
+            )}
+
             {/* Month & Base Rent Display */}
             <View style={styles.rentInfoCard}>
               <View style={styles.rentInfoRow}>
@@ -207,7 +259,9 @@ export const LogPaymentModal: React.FC<LogPaymentModalProps> = ({
 
             {/* Amount Paid Input */}
             <View style={styles.formGroup}>
-              <Text style={styles.inputLabel}>Amount Actually Paid (₹) *</Text>
+              <Text style={styles.inputLabel}>
+                {isFlexibleMode ? 'Flexible Amount Paid (Any Random Figure) (₹) *' : 'Amount Actually Paid (₹) *'}
+              </Text>
               <View style={styles.currencyInputRow}>
                 <Text style={styles.currencySymbol}>₹</Text>
                 <TextInput
@@ -217,6 +271,75 @@ export const LogPaymentModal: React.FC<LogPaymentModalProps> = ({
                   value={amountPaid}
                   onChangeText={setAmountPaid}
                 />
+              </View>
+            </View>
+
+            {/* Live Newer Dues Calculation Box */}
+            <View style={styles.duesPreviewCard}>
+              <View style={styles.duesHeader}>
+                <Scale size={16} color="#4338CA" />
+                <Text style={styles.duesHeaderTitle}>Rent Balance & Newer Dues Impact</Text>
+              </View>
+
+              <View style={styles.duesGrid}>
+                <View style={styles.duesCol}>
+                  <Text style={styles.duesLabel}>Prior Dues</Text>
+                  <Text
+                    style={[
+                      styles.duesValue,
+                      currentSummary.rentDifference > 0
+                        ? styles.textRed
+                        : currentSummary.rentDifference < 0
+                        ? styles.textEmerald
+                        : styles.textSlate,
+                    ]}
+                  >
+                    {currentSummary.rentDifference > 0
+                      ? `+₹${currentSummary.rentDifference.toLocaleString()}`
+                      : currentSummary.rentDifference < 0
+                      ? `-₹${Math.abs(currentSummary.rentDifference).toLocaleString()}`
+                      : '₹0'}
+                  </Text>
+                </View>
+
+                <View style={styles.duesCol}>
+                  <Text style={styles.duesLabel}>This Period</Text>
+                  <Text style={styles.duesValue}>+₹{netExpectedPayout.toLocaleString()}</Text>
+                </View>
+
+                <View style={styles.duesCol}>
+                  <Text style={styles.duesLabel}>You Logging</Text>
+                  <Text style={[styles.duesValue, { color: '#047857' }]}>
+                    -₹{numPaid.toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.duesResultRow}>
+                <Text style={styles.duesResultLabel}>➔ Newer Remaining Balance:</Text>
+                <View
+                  style={[
+                    styles.duesBadge,
+                    newerDues.newerRemainingDue > 0 && styles.duesBadgeDue,
+                    newerDues.newerRemainingDue < 0 && styles.duesBadgeAdvance,
+                    newerDues.newerRemainingDue === 0 && styles.duesBadgeSettled,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.duesBadgeText,
+                      newerDues.newerRemainingDue > 0 && styles.duesBadgeTextDue,
+                      newerDues.newerRemainingDue < 0 && styles.duesBadgeTextAdvance,
+                      newerDues.newerRemainingDue === 0 && styles.duesBadgeTextSettled,
+                    ]}
+                  >
+                    {newerDues.newerRemainingDue > 0
+                      ? `Pending Due: ₹${newerDues.newerDueAmount.toLocaleString()}`
+                      : newerDues.newerRemainingDue < 0
+                      ? `Advance Credit: ₹${newerDues.newerAdvanceAmount.toLocaleString()}`
+                      : 'All Cleared (₹0)'}
+                  </Text>
+                </View>
               </View>
             </View>
 
@@ -615,5 +738,145 @@ const styles = StyleSheet.create({
   modeButtonTextActive: {
     fontWeight: '800',
     color: '#0F172A',
+  },
+  flexibleToggleRow: {
+    marginBottom: 12,
+  },
+  flexibleModeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+  },
+  flexibleModeChipActive: {
+    backgroundColor: '#7C3AED',
+  },
+  flexibleModeChipInactive: {
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  flexibleModeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  flexibleModeTextActive: {
+    color: '#FFFFFF',
+  },
+  flexibleModeTextInactive: {
+    color: '#7C3AED',
+  },
+  flexibleNoticeBanner: {
+    backgroundColor: '#FAF5FF',
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  flexibleNoticeText: {
+    fontSize: 12,
+    color: '#6B21A8',
+    lineHeight: 18,
+  },
+  duesPreviewCard: {
+    backgroundColor: '#EEF2FF',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+    padding: 14,
+    marginBottom: 18,
+  },
+  duesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  duesHeaderTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#3730A3',
+  },
+  duesGrid: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+  },
+  duesCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  duesLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+  },
+  duesValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginTop: 2,
+  },
+  duesResultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E7FF',
+  },
+  duesResultLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#312E81',
+  },
+  duesBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  duesBadgeDue: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  duesBadgeAdvance: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  duesBadgeSettled: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  duesBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  duesBadgeTextDue: {
+    color: '#DC2626',
+  },
+  duesBadgeTextAdvance: {
+    color: '#059669',
+  },
+  duesBadgeTextSettled: {
+    color: '#16A34A',
+  },
+  textRed: {
+    color: '#DC2626',
+  },
+  textEmerald: {
+    color: '#059669',
+  },
+  textSlate: {
+    color: '#475569',
   },
 });
