@@ -10,7 +10,9 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
+import * as Updates from 'expo-updates';
 import {
   ShieldCheck,
   X,
@@ -22,6 +24,8 @@ import {
   Delete,
   RotateCcw,
   Trash2,
+  Sparkles,
+  RefreshCw,
 } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
 
@@ -54,6 +58,7 @@ export const PinManagementModal: React.FC<PinManagementModalProps> = ({
   const [firstEnteredPin, setFirstEnteredPin] = useState<string>('');
   const [oldVerifiedPin, setOldVerifiedPin] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState<boolean>(false);
 
   const resetFlow = () => {
     setMode('menu');
@@ -201,6 +206,60 @@ export const PinManagementModal: React.FC<PinManagementModalProps> = ({
     setTimeout(() => {
       lockApp();
     }, 150);
+  };
+
+  const handleCheckAppUpdate = async () => {
+    setIsCheckingUpdate(true);
+    try {
+      if (__DEV__ || !Updates.isEnabled) {
+        Alert.alert(
+          'Standalone Feature',
+          'OTA updates apply on installed release APK builds. In development mode, changes reload immediately via Metro.'
+        );
+        return;
+      }
+      const check = await Updates.checkForUpdateAsync();
+      if (check.isAvailable) {
+        Alert.alert(
+          'Update Found!',
+          'A new update is available. Do you want to download and restart now to apply it?',
+          [
+            { text: 'Later', style: 'cancel' },
+            {
+              text: 'Download & Restart',
+              onPress: async () => {
+                await Updates.fetchUpdateAsync();
+                await Updates.reloadAsync();
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Up to Date',
+          'Your app is already running the latest version!'
+        );
+      }
+    } catch (err: any) {
+      console.warn('Update check error:', err);
+      Alert.alert(
+        'Update Check',
+        'Could not complete online check. If an update was recently pushed, swipe Rento closed from your recent apps and reopen it to apply.'
+      );
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  const handleRestartApp = async () => {
+    try {
+      await Updates.reloadAsync();
+    } catch (err) {
+      Alert.alert(
+        'Restarting App',
+        'To restart on your device: open your recent apps screen, swipe Rento away, and reopen it.'
+      );
+    }
   };
 
   const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -361,26 +420,70 @@ export const PinManagementModal: React.FC<PinManagementModalProps> = ({
                         </View>
                       </View>
                     </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[styles.actionItem, styles.actionItemDanger]}
-                      onPress={handleResetAllData}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.actionItemLeft}>
-                        <Trash2 size={18} color="#DC2626" />
-                        <View>
-                          <Text style={[styles.actionItemTitle, { color: '#DC2626' }]}>
-                            Reset All App Data
-                          </Text>
-                          <Text style={styles.actionItemSub}>
-                            Permanently wipe properties and start fresh
-                          </Text>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
                   </>
                 )}
+
+                {/* Live App OTA Updates & App Reset Section */}
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionHeaderTitle}>APP UPDATES & REBOOT</Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.actionItem}
+                  onPress={handleCheckAppUpdate}
+                  disabled={isCheckingUpdate}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.actionItemLeft}>
+                    {isCheckingUpdate ? (
+                      <ActivityIndicator size="small" color="#059669" />
+                    ) : (
+                      <Sparkles size={18} color="#059669" />
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.actionItemTitle}>Check for App Updates</Text>
+                      <Text style={styles.actionItemSub}>
+                        {isCheckingUpdate
+                          ? 'Checking EAS servers for new release...'
+                          : 'Download newest updates over-the-air'}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.actionItem}
+                  onPress={handleRestartApp}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.actionItemLeft}>
+                    <RefreshCw size={18} color="#0284C7" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.actionItemTitle}>Restart / Reset App (Apply OTA)</Text>
+                      <Text style={styles.actionItemSub}>
+                        Reloads app code to apply downloaded updates
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionItem, styles.actionItemDanger]}
+                  onPress={handleResetAllData}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.actionItemLeft}>
+                    <Trash2 size={18} color="#DC2626" />
+                    <View>
+                      <Text style={[styles.actionItemTitle, { color: '#DC2626' }]}>
+                        Reset All App Data
+                      </Text>
+                      <Text style={styles.actionItemSub}>
+                        Permanently wipe properties and start fresh
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
               </View>
 
               {/* Safe Persistence Note */}
@@ -603,6 +706,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748B',
     marginTop: 2,
+  },
+  sectionHeader: {
+    marginTop: 14,
+    marginBottom: 2,
+    paddingHorizontal: 4,
+  },
+  sectionHeaderTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#64748B',
+    letterSpacing: 0.8,
   },
   safeNote: {
     flexDirection: 'row',

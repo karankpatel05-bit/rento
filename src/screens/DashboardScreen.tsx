@@ -6,7 +6,10 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import * as Updates from 'expo-updates';
 import {
   Building2,
   Plus,
@@ -19,6 +22,7 @@ import {
   Sparkles,
   Scale,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react-native';
 import { useApp } from '../context/AppContext';
 import { Tenant } from '../types';
@@ -75,11 +79,148 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     });
   }, [tenants, searchQuery, activeFilter]);
 
+  const { isUpdateAvailable, isUpdatePending, isDownloading } = Updates.useUpdates();
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState<boolean>(false);
+
+  const handleManualCheckUpdate = async () => {
+    setIsCheckingUpdate(true);
+    try {
+      if (__DEV__ || !Updates.isEnabled) {
+        Alert.alert(
+          'OTA Live Updates Active',
+          'Over-The-Air updates are active on the installed release APK. In dev mode, changes reload immediately via Metro.'
+        );
+        return;
+      }
+
+      const check = await Updates.checkForUpdateAsync();
+      if (check.isAvailable) {
+        Alert.alert(
+          '🎉 New Update Found!',
+          'A new update is available. Do you want to download and restart now to apply the latest changes?',
+          [
+            { text: 'Later', style: 'cancel' },
+            {
+              text: 'Download & Restart',
+              onPress: async () => {
+                await Updates.fetchUpdateAsync();
+                await Updates.reloadAsync();
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert(
+          '✅ App is Up to Date',
+          'You already have the latest update loaded on your phone.'
+        );
+      }
+    } catch (err: any) {
+      console.warn('Update check failed:', err);
+      Alert.alert(
+        'Update Check',
+        'Could not complete check. To apply pending updates, you can also swipe Rento closed from your recent apps and reopen it.'
+      );
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  const handleQuickRestart = async () => {
+    try {
+      if (__DEV__ || !Updates.isEnabled) {
+        Alert.alert(
+          'Restart App',
+          'In development mode, changes reload immediately via Metro.'
+        );
+        return;
+      }
+      await Updates.reloadAsync();
+    } catch (err) {
+      Alert.alert(
+        'Restart App',
+        'To reload: swipe Rento closed from your recent apps screen and reopen it.'
+      );
+    }
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
         {/* May Reminder Banner (Automated May alert notification anchor) */}
         <MayReminderBanner onPress={onNavigateToAlerts} />
+
+        {/* Live App OTA Update & Reset Card */}
+        <View style={[styles.updateCard, isUpdatePending && styles.updateCardPending]}>
+          <View style={styles.updateCardLeft}>
+            <View style={[styles.updateIconCircle, isUpdatePending && styles.updateIconCirclePending]}>
+              <Sparkles size={16} color={isUpdatePending ? '#059669' : '#4F46E5'} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={styles.updateTitleRow}>
+                <Text style={styles.updateCardTitle}>
+                  {isDownloading
+                    ? 'Downloading Update...'
+                    : isUpdatePending
+                    ? 'Update Ready to Apply! 🎉'
+                    : 'Live Updates (OTA)'}
+                </Text>
+                {isUpdatePending && (
+                  <View style={styles.newBadge}>
+                    <Text style={styles.newBadgeText}>READY</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.updateCardSub}>
+                {isDownloading
+                  ? 'Fetching latest release in background...'
+                  : isUpdatePending
+                  ? 'Tap Restart to apply the newest updates now'
+                  : 'Rento v1.0.0 • Offline Safe & Synced'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.updateCardActions}>
+            {isUpdatePending ? (
+              <TouchableOpacity
+                style={[styles.updateCardBtn, styles.updateCardBtnRestart]}
+                onPress={() => Updates.reloadAsync()}
+                activeOpacity={0.8}
+              >
+                <RefreshCw size={13} color="#FFFFFF" />
+                <Text style={styles.updateCardBtnText}>Restart to Apply</Text>
+              </TouchableOpacity>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.updateCardBtn}
+                  onPress={handleManualCheckUpdate}
+                  disabled={isCheckingUpdate || isDownloading}
+                  activeOpacity={0.8}
+                >
+                  {isCheckingUpdate ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Sparkles size={12} color="#FFFFFF" />
+                      <Text style={styles.updateCardBtnText}>Check Update</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.updateCardBtnOutline}
+                  onPress={handleQuickRestart}
+                  activeOpacity={0.7}
+                >
+                  <RefreshCw size={12} color="#475569" />
+                  <Text style={styles.updateCardBtnOutlineText}>Restart</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
 
         {/* Landlord Financial Overview Cards */}
         <View style={styles.metricsContainer}>
@@ -295,6 +436,110 @@ const styles = StyleSheet.create({
   scrollArea: {
     flex: 1,
     padding: 16,
+  },
+  updateCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  updateCardPending: {
+    borderColor: '#86EFAC',
+    backgroundColor: '#F0FDF4',
+  },
+  updateCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    paddingRight: 8,
+  },
+  updateIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  updateIconCirclePending: {
+    backgroundColor: '#DCFCE7',
+  },
+  updateTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  newBadge: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  newBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  updateCardTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  updateCardSub: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  updateCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  updateCardBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#059669',
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  updateCardBtnRestart: {
+    backgroundColor: '#16A34A',
+    paddingHorizontal: 12,
+  },
+  updateCardBtnOutline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    paddingVertical: 7,
+    paddingHorizontal: 9,
+    borderRadius: 10,
+  },
+  updateCardBtnOutlineText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  updateCardBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   metricsContainer: {
     marginBottom: 20,
