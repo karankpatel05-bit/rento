@@ -1,12 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Bell, ShieldCheck } from 'lucide-react-native';
+import { Bell, Lock, Unlock, ShieldCheck } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
 
 interface HeaderProps {
   title: string;
   subtitle?: string;
   onOpenAlerts?: () => void;
+  onOpenSecurity?: () => void;
   activeTab?: string;
 }
 
@@ -14,9 +15,10 @@ export const Header: React.FC<HeaderProps> = ({
   title,
   subtitle,
   onOpenAlerts,
+  onOpenSecurity,
   activeTab,
 }) => {
-  const { alerts } = useApp();
+  const { alerts, isPinSet, isPinEnabled } = useApp();
   const unresolvedAlertsCount = alerts.filter((a) => !a.isResolved).length;
 
   return (
@@ -32,20 +34,39 @@ export const Header: React.FC<HeaderProps> = ({
         {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
       </View>
 
-      {onOpenAlerts && (
-        <TouchableOpacity
-          style={[styles.bellButton, activeTab === 'alerts' && styles.bellButtonActive]}
-          onPress={onOpenAlerts}
-          activeOpacity={0.7}
-        >
-          <Bell size={20} color={activeTab === 'alerts' ? '#059669' : '#334155'} />
-          {unresolvedAlertsCount > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{unresolvedAlertsCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      )}
+      <View style={styles.rightActions}>
+        {onOpenSecurity && (
+          <TouchableOpacity
+            style={[
+              styles.securityButton,
+              isPinSet && isPinEnabled && styles.securityButtonActive,
+            ]}
+            onPress={onOpenSecurity}
+            activeOpacity={0.7}
+          >
+            {isPinSet && isPinEnabled ? (
+              <Lock size={17} color="#047857" />
+            ) : (
+              <Unlock size={17} color="#94A3B8" />
+            )}
+          </TouchableOpacity>
+        )}
+
+        {onOpenAlerts && (
+          <TouchableOpacity
+            style={[styles.bellButton, activeTab === 'alerts' && styles.bellButtonActive]}
+            onPress={onOpenAlerts}
+            activeOpacity={0.7}
+          >
+            <Bell size={18} color={activeTab === 'alerts' ? '#059669' : '#334155'} />
+            {unresolvedAlertsCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{unresolvedAlertsCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 };
@@ -134,5 +155,24 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '700',
+  },
+  rightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  securityButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  securityButtonActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
   },
 });

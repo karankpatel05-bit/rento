@@ -18,11 +18,14 @@ import { DashboardScreen } from './src/screens/DashboardScreen';
 import { TenantDetailScreen } from './src/screens/TenantDetailScreen';
 import { AlertsScreen } from './src/screens/AlertsScreen';
 import { Tenant } from './src/types';
+import { PinLockScreen } from './src/components/security/PinLockScreen';
+import { PinManagementModal } from './src/components/security/PinManagementModal';
 
 function MainApp() {
-  const { tenants, alerts } = useApp();
+  const { tenants, alerts, isAppLocked } = useApp();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'alerts'>('dashboard');
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState<boolean>(false);
 
   const pendingAlertsCount = alerts.filter((a) => !a.isResolved).length;
 
@@ -79,6 +82,7 @@ function MainApp() {
           }
           activeTab={activeTab}
           onOpenAlerts={() => setActiveTab(activeTab === 'dashboard' ? 'alerts' : 'dashboard')}
+          onOpenSecurity={() => setIsSecurityModalOpen(true)}
         />
       )}
 
@@ -152,6 +156,15 @@ function MainApp() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* PIN Security Management Modal */}
+      <PinManagementModal
+        visible={isSecurityModalOpen}
+        onClose={() => setIsSecurityModalOpen(false)}
+      />
+
+      {/* Fullscreen PIN Lock Screen Overlay when app is locked */}
+      {isAppLocked && <PinLockScreen />}
     </SafeAreaView>
   );
 }

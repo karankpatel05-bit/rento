@@ -6,24 +6,46 @@ const STORAGE_KEYS = {
   PAYMENTS: '@rento_payments_v2',
   INTEREST_COLLECTIONS: '@rento_interest_collections_v2',
   CLEAN_INITIALIZED: '@rento_clean_v2',
+  SECURITY_PIN: '@rento_security_pin',
+  PIN_ENABLED: '@rento_pin_enabled',
 };
 
 export const StorageService = {
   async init(): Promise<void> {
-    const initialized = await AsyncStorage.getItem(STORAGE_KEYS.CLEAN_INITIALIZED);
-    if (!initialized) {
-      // Clear any legacy demo keys and start 100% clean
-      await AsyncStorage.multiRemove([
-        '@rento_tenants',
-        '@rento_payments',
-        '@rento_interest_collections',
-        '@rento_initialized_v1',
-      ]);
-      await AsyncStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify([]));
-      await AsyncStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
-      await AsyncStorage.setItem(STORAGE_KEYS.INTEREST_COLLECTIONS, JSON.stringify([]));
-      await AsyncStorage.setItem(STORAGE_KEYS.CLEAN_INITIALIZED, 'true');
+    // Migration & safety check: NEVER wipe existing user data!
+    // If v2 keys already exist, they are preserved 100%.
+    // If legacy keys exist from earlier versions, migrate them forward.
+    const v2Tenants = await AsyncStorage.getItem(STORAGE_KEYS.TENANTS);
+    if (!v2Tenants) {
+      const legacyTenants = await AsyncStorage.getItem('@rento_tenants');
+      if (legacyTenants) {
+        await AsyncStorage.setItem(STORAGE_KEYS.TENANTS, legacyTenants);
+      } else {
+        await AsyncStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify([]));
+      }
     }
+
+    const v2Payments = await AsyncStorage.getItem(STORAGE_KEYS.PAYMENTS);
+    if (!v2Payments) {
+      const legacyPayments = await AsyncStorage.getItem('@rento_payments');
+      if (legacyPayments) {
+        await AsyncStorage.setItem(STORAGE_KEYS.PAYMENTS, legacyPayments);
+      } else {
+        await AsyncStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
+      }
+    }
+
+    const v2Interests = await AsyncStorage.getItem(STORAGE_KEYS.INTEREST_COLLECTIONS);
+    if (!v2Interests) {
+      const legacyInterests = await AsyncStorage.getItem('@rento_interest_collections');
+      if (legacyInterests) {
+        await AsyncStorage.setItem(STORAGE_KEYS.INTEREST_COLLECTIONS, legacyInterests);
+      } else {
+        await AsyncStorage.setItem(STORAGE_KEYS.INTEREST_COLLECTIONS, JSON.stringify([]));
+      }
+    }
+
+    await AsyncStorage.setItem(STORAGE_KEYS.CLEAN_INITIALIZED, 'true');
   },
 
   async getTenants(): Promise<Tenant[]> {
@@ -108,5 +130,30 @@ export const StorageService = {
     await AsyncStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify([]));
     await AsyncStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
     await AsyncStorage.setItem(STORAGE_KEYS.INTEREST_COLLECTIONS, JSON.stringify([]));
-  }
+  },
+
+  async getSecurityPin(): Promise<string | null> {
+    return await AsyncStorage.getItem(STORAGE_KEYS.SECURITY_PIN);
+  },
+
+  async saveSecurityPin(pin: string): Promise<void> {
+    await AsyncStorage.setItem(STORAGE_KEYS.SECURITY_PIN, pin);
+    await AsyncStorage.setItem(STORAGE_KEYS.PIN_ENABLED, 'true');
+  },
+
+  async isPinEnabled(): Promise<boolean> {
+    const pin = await AsyncStorage.getItem(STORAGE_KEYS.SECURITY_PIN);
+    if (!pin) return false;
+    const enabled = await AsyncStorage.getItem(STORAGE_KEYS.PIN_ENABLED);
+    return enabled !== 'false'; // defaults to true once PIN is set
+  },
+
+  async setPinEnabled(enabled: boolean): Promise<void> {
+    await AsyncStorage.setItem(STORAGE_KEYS.PIN_ENABLED, enabled ? 'true' : 'false');
+  },
+
+  async removeSecurityPin(): Promise<void> {
+    await AsyncStorage.removeItem(STORAGE_KEYS.SECURITY_PIN);
+    await AsyncStorage.setItem(STORAGE_KEYS.PIN_ENABLED, 'false');
+  },
 };

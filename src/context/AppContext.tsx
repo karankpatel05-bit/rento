@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import {
   Tenant,
   PaymentRecord,
@@ -17,6 +18,17 @@ interface AppContextType {
   isLoading: boolean;
   selectedTenantId: string | null;
   setSelectedTenantId: (id: string | null) => void;
+  // Security PIN states and operations
+  isPinSet: boolean;
+  isPinEnabled: boolean;
+  isAppLocked: boolean;
+  unlockApp: (enteredPin: string) => boolean;
+  lockApp: () => void;
+  setupPin: (newPin: string) => Promise<void>;
+  changePin: (oldPin: string, newPin: string) => Promise<boolean>;
+  togglePinEnabled: (enabled: boolean) => Promise<void>;
+  resetPinEmergency: () => Promise<void>;
+
   addTenant: (
     tenant: Omit<Tenant, 'id' | 'createdAt'>,
     historicalPayments?: Omit<PaymentRecord, 'id' | 'createdAt' | 'tenantId'>[]
@@ -44,6 +56,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
 
+  // Security PIN state
+  const [securityPin, setSecurityPin] = useState<string | null>(null);
+  const [isPinSet, setIsPinSet] = useState<boolean>(false);
+  const [isPinEnabled, setIsPinEnabled] = useState<boolean>(false);
+  const [isAppLocked, setIsAppLocked] = useState<boolean>(false);
+
   const loadAll = async () => {
     try {
       setIsLoading(true);
@@ -52,9 +70,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const loadedPayments = await StorageService.getPayments();
       const loadedInterests = await StorageService.getInterestCollections();
 
+      const savedPin = await StorageService.getSecurityPin();
+      const pinEnabled = await StorageService.isPinEnabled();
+
       setTenants(loadedTenants);
       setPayments(loadedPayments);
       setInterestCollections(loadedInterests);
+      setSecurityPin(savedPin);
+      setIsPinSet(Boolean(savedPin));
+      setIsPinEnabled(pinEnabled);
+
+      if (Boolean(savedPin) && pinEnabled) {
+        setIsAppLocked(true);
+      }
     } catch (err) {
       console.error('Error loading app data:', err);
     } finally {
@@ -66,6 +94,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadAll();
     NotificationService.requestPermissionsAsync();
   }, []);
+
+  // Auto-lock when returning from background
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        if (isPinSet && isPinEnabled) {
+          setIsAppLocked(true);
+        }
+      }
+    });
+    return () => sub.remove();
+  }, [isPinSet, isPinEnabled]);
+
+  const unlockApp = (enteredPin: string): boolean => {
+    if (!securityPin || enteredPin === securityPin) {
+      setIsAppLocked(false);
+      return true;
+    }
+    return false;
+  };
+
+  const lockApp = (): void => {
+    if (isPinSet && isPinEnabled) {
+      setIsAppLocked(true);
+    }
+  };
+
+  const setupPin = async (newPin: string): Promise<void> => {
+    await StorageService.saveSecurityPin(newPin);
+    setSecurityPin(newPin);
+    setIsPinSet(true);
+    setIsPinEnabled(true);
+    setIsAppLocked(false);
+  };
+
+  const changePin = async (oldPin: string, newPin: string): Promise<boolean> => {
+    if (securityPin && oldPin !== securityPin) {
+      return false;
+    }
+    await StorageService.saveSecurityPin(newPin);
+    setSecurityPin(newPin);
+    setIsPinSet(true);
+    setIsPinEnabled(true);
+    return true;
+  };
+
+  const togglePinEnabled = async (enabled: boolean): Promise<void> => {
+    await StorageService.setPinEnabled(enabled);
+    setIsPinEnabled(enabled);
+    if (!enabled) {
+      setIsAppLocked(false);
+    }
+  };
+
+  const resetPinEmergency = async (): Promise<void> => {
+    await StorageService.removeSecurityPin();
+    setSecurityPin(null);
+    setIsPinSet(false);
+    setIsPinEnabled(false);
+    setIsAppLocked(false);
+  };
 
   const addTenant = async (
     tenantData: Omit<Tenant, 'id' | 'createdAt'>,
@@ -194,6 +283,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isLoading,
         selectedTenantId,
         setSelectedTenantId,
+        isPinSet,
+        isPinEnabled,
+        isAppLocked,
+        unlockApp,
+        lockApp,
+        setupPin,
+        changePin,
+        togglePinEnabled,
+        resetPinEmergency,
         addTenant,
         updateTenant,
         deleteTenant,
