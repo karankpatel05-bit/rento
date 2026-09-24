@@ -8,7 +8,7 @@ import {
   Vibration,
   Platform,
 } from 'react-native';
-import { ShieldCheck, Delete, KeyRound, AlertTriangle } from 'lucide-react-native';
+import { ShieldCheck, Delete, KeyRound, AlertTriangle, RotateCcw } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
 
 export const PinLockScreen: React.FC = () => {
@@ -125,13 +125,14 @@ export const PinLockScreen: React.FC = () => {
             </TouchableOpacity>
           ))}
 
-          {/* Bottom Row: Clear, 0, Backspace */}
+          {/* Bottom Row: Reset PIN, 0, Backspace */}
           <TouchableOpacity
-            style={styles.keyBtnAux}
-            onPress={handleClear}
+            style={[styles.keyBtnAux, styles.keyBtnReset]}
+            onPress={handleForgotPin}
             activeOpacity={0.6}
           >
-            <Text style={styles.keyAuxText}>Clear</Text>
+            <RotateCcw size={16} color="#F59E0B" />
+            <Text style={styles.keyResetText}>Reset</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -152,15 +153,27 @@ export const PinLockScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Forgot PIN Option */}
-      <TouchableOpacity
-        style={styles.forgotBtn}
-        onPress={handleForgotPin}
-        activeOpacity={0.7}
-      >
-        <KeyRound size={14} color="#94A3B8" />
-        <Text style={styles.forgotText}>Forgot PIN? Reset Safely</Text>
-      </TouchableOpacity>
+      {/* Prominent Reset PIN Option */}
+      <View style={styles.resetOptionsRow}>
+        <TouchableOpacity
+          style={styles.forgotBtn}
+          onPress={handleForgotPin}
+          activeOpacity={0.7}
+        >
+          <RotateCcw size={15} color="#FCD34D" />
+          <Text style={styles.forgotText}>Forgot PIN? Tap to Reset</Text>
+        </TouchableOpacity>
+
+        {enteredPin.length > 0 && (
+          <TouchableOpacity
+            style={styles.clearMiniBtn}
+            onPress={handleClear}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.clearMiniText}>Clear</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 };
@@ -320,6 +333,35 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
   },
   forgotText: {
+    fontSize: 12,
+    color: '#FCD34D',
+    fontWeight: '700',
+  },
+  keyBtnReset: {
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  keyResetText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#F59E0B',
+    marginTop: 2,
+  },
+  resetOptionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  clearMiniBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: 'rgba(51, 65, 85, 0.4)',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  clearMiniText: {
     fontSize: 12,
     color: '#94A3B8',
     fontWeight: '600',

@@ -20,6 +20,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Delete,
+  RotateCcw,
+  Trash2,
 } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
 
@@ -39,6 +41,7 @@ export const PinManagementModal: React.FC<PinManagementModalProps> = ({
     changePin,
     togglePinEnabled,
     resetPinEmergency,
+    clearAllData,
     lockApp,
   } = useApp();
 
@@ -157,17 +160,36 @@ export const PinManagementModal: React.FC<PinManagementModalProps> = ({
 
   const handleRemovePin = () => {
     Alert.alert(
-      'Remove Security PIN?',
-      'Are you sure you want to disable PIN protection? The app will open directly without asking for a code.',
+      'Reset Security PIN?',
+      'Are you sure you want to reset/remove your PIN? All property and tenant records will remain 100% safe. The app will open directly without asking for a code.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Remove PIN',
+          text: 'Reset PIN',
           style: 'destructive',
           onPress: async () => {
             await resetPinEmergency();
-            Alert.alert('PIN Removed', 'App Lock is now disabled.');
+            Alert.alert('PIN Reset', 'Security PIN has been cleared. App lock is disabled.');
             resetFlow();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleResetAllData = () => {
+    Alert.alert(
+      '⚠️ Reset All App Data?',
+      'WARNING: This will permanently delete ALL properties, tenants, payments, security deposits, and history on this device.\n\nThis cannot be undone. Are you sure you want to reset everything?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Permanently Delete All Data',
+          style: 'destructive',
+          onPress: async () => {
+            await clearAllData();
+            Alert.alert('Reset Complete', 'All property and tenant data has been reset.');
+            handleClose();
           },
         },
       ]
@@ -323,18 +345,36 @@ export const PinManagementModal: React.FC<PinManagementModalProps> = ({
                     )}
 
                     <TouchableOpacity
-                      style={[styles.actionItem, styles.actionItemDanger]}
+                      style={[styles.actionItem, styles.actionItemAmber]}
                       onPress={handleRemovePin}
                       activeOpacity={0.7}
                     >
                       <View style={styles.actionItemLeft}>
-                        <AlertCircle size={18} color="#DC2626" />
+                        <RotateCcw size={18} color="#D97706" />
                         <View>
-                          <Text style={[styles.actionItemTitle, { color: '#DC2626' }]}>
-                            Remove PIN Protection
+                          <Text style={[styles.actionItemTitle, { color: '#B45309' }]}>
+                            Reset Security PIN
                           </Text>
                           <Text style={styles.actionItemSub}>
-                            Deactivates code requirement on launch
+                            Clears 4-digit code (keeps tenant data 100% safe)
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.actionItem, styles.actionItemDanger]}
+                      onPress={handleResetAllData}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.actionItemLeft}>
+                        <Trash2 size={18} color="#DC2626" />
+                        <View>
+                          <Text style={[styles.actionItemTitle, { color: '#DC2626' }]}>
+                            Reset All App Data
+                          </Text>
+                          <Text style={styles.actionItemSub}>
+                            Permanently wipe properties and start fresh
                           </Text>
                         </View>
                       </View>
@@ -544,6 +584,10 @@ const styles = StyleSheet.create({
   actionItemDanger: {
     backgroundColor: '#FEF2F2',
     borderColor: '#FECACA',
+  },
+  actionItemAmber: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
   },
   actionItemLeft: {
     flexDirection: 'row',
