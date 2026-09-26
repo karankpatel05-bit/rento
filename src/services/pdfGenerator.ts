@@ -39,31 +39,52 @@ export const PdfGenerator = {
               ? p.netPayoutReceived
               : p.expectedRent;
             const diff = p.amountPaid - netExpected;
-            const diffHtml =
-              diff === 0
-                ? `<span style="color: #047857; font-weight: bold;">₹0 (Settled)</span>`
-                : diff > 0
-                ? `<span style="color: #1D4ED8; font-weight: bold;">+₹${diff.toLocaleString()} (Adv)</span>`
-                : `<span style="color: #DC2626; font-weight: bold;">-₹${Math.abs(diff).toLocaleString()} (Due)</span>`;
+            const isDeclaredOnly = p.amountPaid === 0 && p.expectedRent > 0;
+            const isPaymentOnly = p.expectedRent === 0 && p.amountPaid > 0;
+
+            let diffHtml = '';
+            if (isDeclaredOnly) {
+              diffHtml = `<span style="color: #4338CA; font-weight: bold;">+₹${netExpected.toLocaleString()} (Rent Declared)</span>`;
+            } else if (isPaymentOnly) {
+              diffHtml = `<span style="color: #047857; font-weight: bold;">-₹${p.amountPaid.toLocaleString()} (Paid to Dues)</span>`;
+            } else if (diff === 0) {
+              diffHtml = `<span style="color: #047857; font-weight: bold;">₹0 (Settled)</span>`;
+            } else if (diff > 0) {
+              diffHtml = `<span style="color: #1D4ED8; font-weight: bold;">+₹${diff.toLocaleString()} (Adv)</span>`;
+            } else {
+              diffHtml = `<span style="color: #DC2626; font-weight: bold;">-₹${Math.abs(diff).toLocaleString()} (Due)</span>`;
+            }
+
+            const dateDisplay = isDeclaredOnly
+              ? `<span style="color: #64748B;">Declared: ${p.paymentDate}</span>`
+              : p.paymentDate;
+
+            const modeBadge = isDeclaredOnly
+              ? `<span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; background-color: #EEF2FF; color: #4338CA;">Declared</span>`
+              : `<span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; background-color: ${
+                  p.paymentMode === 'UPI' ? '#EEF2FF' : p.paymentMode === 'NEFT' ? '#EFF6FF' : '#ECFDF5'
+                }; color: ${
+                  p.paymentMode === 'UPI' ? '#4338CA' : p.paymentMode === 'NEFT' ? '#1D4ED8' : '#047857'
+                };">${p.paymentMode || 'Cash'}</span>`;
 
             return `
           <tr style="background-color: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
             <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; font-weight: 600;">${p.monthYear}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; color: #475569;">${p.paymentDate}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; color: #475569;">${dateDisplay}</td>
             <td style="padding: 10px; border-bottom: 1px solid #E2E8F0;">
-              <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; background-color: ${
-                p.paymentMode === 'UPI' ? '#EEF2FF' : p.paymentMode === 'NEFT' ? '#EFF6FF' : '#ECFDF5'
-              }; color: ${
-                p.paymentMode === 'UPI' ? '#4338CA' : p.paymentMode === 'NEFT' ? '#1D4ED8' : '#047857'
-              };">${p.paymentMode || 'Cash'}</span>
+              ${modeBadge}
             </td>
-            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right;">₹${p.expectedRent.toLocaleString()}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right;">${
+              isPaymentOnly ? '—' : `₹${p.expectedRent.toLocaleString()}`
+            }</td>
             <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right; color: ${
               p.isMaintenanceDeducted ? '#DC2626' : '#94A3B8'
             };">
               ${p.isMaintenanceDeducted ? `-₹${p.maintenanceDeductionAmount.toLocaleString()}` : '—'}
             </td>
-            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-weight: bold; color: #047857;">
+            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-weight: bold; color: ${
+              p.amountPaid > 0 ? '#047857' : '#94A3B8'
+            };">
               ₹${p.amountPaid.toLocaleString()}
             </td>
             <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-size: 11px;">

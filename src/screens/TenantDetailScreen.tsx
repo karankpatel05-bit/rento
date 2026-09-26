@@ -27,10 +27,11 @@ import {
   Sparkles,
   Scale,
   RefreshCw,
+  ArrowDown,
 } from 'lucide-react-native';
 import { Tenant, PaymentRecord, InterestCollectionRecord } from '../types';
 import { useApp } from '../context/AppContext';
-import { LogPaymentModal } from '../components/payments/LogPaymentModal';
+import { LogPaymentModal, FlexibleEntryMode } from '../components/payments/LogPaymentModal';
 import { LogInterestModal } from '../components/tenants/LogInterestModal';
 import { LogAdditionalDepositModal } from '../components/tenants/LogAdditionalDepositModal';
 import { LogPastRentModal } from '../components/payments/LogPastRentModal';
@@ -58,6 +59,7 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
   const activeTenant = tenants.find((t) => t.id === tenant.id) || tenant;
 
   const [isLogPaymentOpen, setIsLogPaymentOpen] = useState<boolean>(false);
+  const [logPaymentMode, setLogPaymentMode] = useState<FlexibleEntryMode>('combined');
   const [isLogInterestOpen, setIsLogInterestOpen] = useState<boolean>(false);
   const [isLogAdditionalDepositOpen, setIsLogAdditionalDepositOpen] = useState<boolean>(false);
   const [isLogPastRentOpen, setIsLogPastRentOpen] = useState<boolean>(false);
@@ -357,6 +359,35 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
             </View>
           </View>
 
+          {/* Quick Actions for Flexible Payers */}
+          {isFlexible && (
+            <View style={styles.quickFlexActionsRow}>
+              <TouchableOpacity
+                style={styles.quickFlexDeclareBtn}
+                onPress={() => {
+                  setLogPaymentMode('declare_only');
+                  setIsLogPaymentOpen(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Plus size={14} color="#4338CA" />
+                <Text style={styles.quickFlexDeclareText}>+ Declare Rent Due</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.quickFlexPayBtn}
+                onPress={() => {
+                  setLogPaymentMode('pay_only');
+                  setIsLogPaymentOpen(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <ArrowDown size={14} color="#047857" />
+                <Text style={styles.quickFlexPayText}>₹ Record Payment</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Footnote Explanation */}
           <View style={styles.planExplanationBox}>
             <Scale size={13} color="#64748B" />
@@ -561,7 +592,9 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
                       <View style={styles.dateRow}>
                         <Calendar size={12} color="#64748B" />
                         <Text style={styles.ledgerDate}>
-                          Paid on {payment.paymentDate}
+                          {payment.amountPaid > 0
+                            ? `Paid on ${payment.paymentDate}`
+                            : `Declared on ${payment.paymentDate}`}
                         </Text>
                       </View>
                     </View>
@@ -569,25 +602,39 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
                       <Text style={styles.ledgerPaidAmount}>
                         ₹{payment.amountPaid.toLocaleString()}
                       </Text>
-                      <View
-                        style={[
-                          styles.statusBadge,
-                          payment.status === 'paid'
-                            ? styles.statusPaid
-                            : styles.statusPartial,
-                        ]}
-                      >
-                        <Text
+                      {payment.amountPaid === 0 && payment.expectedRent > 0 ? (
+                        <View style={[styles.statusBadge, styles.statusBilledOnly]}>
+                          <Text style={[styles.statusText, styles.statusTextBilledOnly]}>
+                            Rent Declared
+                          </Text>
+                        </View>
+                      ) : payment.expectedRent === 0 && payment.amountPaid > 0 ? (
+                        <View style={[styles.statusBadge, styles.statusPaymentOnly]}>
+                          <Text style={[styles.statusText, styles.statusTextPaymentOnly]}>
+                            Payment Received
+                          </Text>
+                        </View>
+                      ) : (
+                        <View
                           style={[
-                            styles.statusText,
+                            styles.statusBadge,
                             payment.status === 'paid'
-                              ? styles.statusTextPaid
-                              : styles.statusTextPartial,
+                              ? styles.statusPaid
+                              : styles.statusPartial,
                           ]}
                         >
-                          {payment.status === 'paid' ? 'Paid in Full' : 'Partial'}
-                        </Text>
-                      </View>
+                          <Text
+                            style={[
+                              styles.statusText,
+                              payment.status === 'paid'
+                                ? styles.statusTextPaid
+                                : styles.statusTextPartial,
+                            ]}
+                          >
+                            {payment.status === 'paid' ? 'Paid in Full' : 'Partial'}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                   </View>
 
@@ -730,7 +777,10 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
       <View style={styles.fabContainer}>
         <TouchableOpacity
           style={styles.fab}
-          onPress={() => setIsLogPaymentOpen(true)}
+          onPress={() => {
+            setLogPaymentMode('combined');
+            setIsLogPaymentOpen(true);
+          }}
           activeOpacity={0.85}
         >
           <Plus size={22} color="#FFFFFF" />
@@ -743,6 +793,7 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
         visible={isLogPaymentOpen}
         onClose={() => setIsLogPaymentOpen(false)}
         tenant={activeTenant}
+        initialMode={logPaymentMode}
       />
       <LogInterestModal
         visible={isLogInterestOpen}
@@ -1017,6 +1068,12 @@ const styles = StyleSheet.create({
   statusPartial: {
     backgroundColor: '#FEF2F2',
   },
+  statusBilledOnly: {
+    backgroundColor: '#EEF2FF',
+  },
+  statusPaymentOnly: {
+    backgroundColor: '#F0FDF4',
+  },
   statusText: {
     fontSize: 10,
     fontWeight: '700',
@@ -1026,6 +1083,12 @@ const styles = StyleSheet.create({
   },
   statusTextPartial: {
     color: '#DC2626',
+  },
+  statusTextBilledOnly: {
+    color: '#4338CA',
+  },
+  statusTextPaymentOnly: {
+    color: '#15803D',
   },
   deductionBreakdown: {
     backgroundColor: '#FFFBEB',
@@ -1627,5 +1690,46 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#2563EB',
+  },
+  quickFlexActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  quickFlexDeclareBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+  },
+  quickFlexDeclareText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4338CA',
+  },
+  quickFlexPayBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+  },
+  quickFlexPayText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#047857',
   },
 });
