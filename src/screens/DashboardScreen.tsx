@@ -56,13 +56,20 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [isMonthlyCollectionOpen, setIsMonthlyCollectionOpen] = useState<boolean>(false);
 
   const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0-indexed: 8 = Sept, 9 = Oct
+
+  // Automated monthly collection starts strictly when the month begins, from October 1st 2026 onwards.
+  // Before October 1st 2026 (e.g. September 2026), NO automated monthly pop-up or banner appears.
+  const hasAutomatedMonthStarted =
+    currentYear > 2026 || (currentYear === 2026 && currentMonth >= 9);
+
   const currentMonthYear = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-  const isOctOrLater =
-    now.getFullYear() > 2026 || (now.getFullYear() === 2026 && now.getMonth() >= 9);
-  const targetCollectionMonth = isOctOrLater ? currentMonthYear : 'October 2026';
+  const targetCollectionMonth = hasAutomatedMonthStarted ? currentMonthYear : null;
 
   const activeTenants = useMemo(() => tenants.filter((t) => t.active), [tenants]);
   const uncollectedTenants = useMemo(() => {
+    if (!targetCollectionMonth) return [];
     return activeTenants.filter((t) => {
       const hasPayment = payments.some(
         (p) =>
@@ -73,12 +80,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     });
   }, [activeTenants, payments, targetCollectionMonth]);
 
-  // Auto-pop up when active month is October 2026 or later and there are pending collections
+  // Auto-pop up ONLY when the month has actually started (from Oct 1st 2026 onwards)
+  // and there are pending collections for that started month
   useEffect(() => {
-    if (isOctOrLater && uncollectedTenants.length > 0) {
+    if (hasAutomatedMonthStarted && targetCollectionMonth && uncollectedTenants.length > 0) {
       setIsMonthlyCollectionOpen(true);
+    } else {
+      setIsMonthlyCollectionOpen(false);
     }
-  }, [isOctOrLater, targetCollectionMonth]);
+  }, [hasAutomatedMonthStarted, targetCollectionMonth, uncollectedTenants.length]);
 
   // Financial calculations across all properties
   const portfolio = useMemo(() => {
@@ -251,8 +261,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           </View>
         </View>
 
-        {/* Automated Monthly Rent Collection Banner (Oct 2026 onwards) */}
-        {activeTenants.length > 0 && (
+        {/* Automated Monthly Rent Collection Banner (Only when month starts, Oct 2026 onwards) */}
+        {hasAutomatedMonthStarted && targetCollectionMonth && activeTenants.length > 0 && (
           <View style={styles.monthlyCollectionCard}>
             <View style={styles.monthlyCollectionLeft}>
               <View style={styles.calendarIconCircle}>
@@ -504,11 +514,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         />
       )}
 
-      <MonthlyRentCollectionModal
-        visible={isMonthlyCollectionOpen}
-        onClose={() => setIsMonthlyCollectionOpen(false)}
-        targetMonthYear={targetCollectionMonth}
-      />
+      {hasAutomatedMonthStarted && targetCollectionMonth && (
+        <MonthlyRentCollectionModal
+          visible={isMonthlyCollectionOpen}
+          onClose={() => setIsMonthlyCollectionOpen(false)}
+          targetMonthYear={targetCollectionMonth}
+        />
+      )}
     </View>
   );
 };

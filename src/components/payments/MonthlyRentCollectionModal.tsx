@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -32,7 +32,7 @@ import { useApp } from '../../context/AppContext';
 interface MonthlyRentCollectionModalProps {
   visible: boolean;
   onClose: () => void;
-  targetMonthYear?: string;
+  targetMonthYear?: string | null;
 }
 
 interface TenantFormState {
@@ -58,14 +58,17 @@ export const MonthlyRentCollectionModal: React.FC<MonthlyRentCollectionModalProp
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-  // Default to October 2026 if current date is before Oct 2026, or current month if >= Oct 2026
+  // Default to target month if provided, otherwise current actual month
   const computedMonthYear =
-    targetMonthYear ||
-    (now.getFullYear() > 2026 || (now.getFullYear() === 2026 && now.getMonth() >= 9)
-      ? now.toLocaleString('en-US', { month: 'long', year: 'numeric' })
-      : 'October 2026');
+    targetMonthYear || now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
   const [activeMonthYear, setActiveMonthYear] = useState<string>(computedMonthYear);
+
+  useEffect(() => {
+    if (targetMonthYear) {
+      setActiveMonthYear(targetMonthYear);
+    }
+  }, [targetMonthYear]);
   const [submittingTenantId, setSubmittingTenantId] = useState<string | null>(null);
 
   // Form states keyed by tenantId
