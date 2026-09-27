@@ -72,8 +72,8 @@ export const LogPaymentModal: React.FC<LogPaymentModalProps> = ({
   const [remarks, setRemarks] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Cumulative snapshot of previous payments prior to this entry
-  const currentSummary = calculateTenantRentSummary(tenant, payments);
+  // Cumulative snapshot of previous payments prior to this entry (excluding current month to avoid double-counting)
+  const currentSummary = calculateTenantRentSummary(tenant, payments, undefined, monthYear);
   const priorBalance = currentSummary.rentDifference; // > 0 = Due, < 0 = Advance, 0 = Settled
 
   // Step 1: Declared Rent Calculations
@@ -345,45 +345,66 @@ export const LogPaymentModal: React.FC<LogPaymentModalProps> = ({
                   </Text>
                 </View>
 
-                {/* Maintenance Deduction Toggle */}
-                <View style={styles.toggleCard}>
-                  <View style={styles.toggleRow}>
-                    <View style={styles.toggleTextContainer}>
-                      <View style={styles.toggleHeaderRow}>
-                        <Wrench size={16} color={isMaintenanceDeducted ? '#059669' : '#64748B'} />
-                        <Text style={styles.toggleLabel}>Maintenance Deduction</Text>
+                {/* Variable Maintenance Deduction (Only for tenants configured with variable_rent_deduction) */}
+                {tenant.maintenanceWorkflow === 'variable_rent_deduction' && (
+                  <View style={styles.toggleCard}>
+                    <View style={styles.toggleRow}>
+                      <View style={styles.toggleTextContainer}>
+                        <View style={styles.toggleHeaderRow}>
+                          <Wrench size={16} color={isMaintenanceDeducted ? '#059669' : '#64748B'} />
+                          <Text style={styles.toggleLabel}>Variable Maintenance Deduction</Text>
+                        </View>
+                        <Text style={styles.toggleSubtext}>
+                          Deduct maintenance directly from this period's rent (e.g. ₹12,000 from ₹25,000)
+                        </Text>
                       </View>
-                      <Text style={styles.toggleSubtext}>
-                        Deduct maintenance directly from this period's rent
-                      </Text>
+                      <Switch
+                        value={isMaintenanceDeducted}
+                        onValueChange={(val) => {
+                          setIsMaintenanceDeducted(val);
+                          if (!val) setDeductionAmount('');
+                        }}
+                        trackColor={{ false: '#E2E8F0', true: '#A7F3D0' }}
+                        thumbColor={isMaintenanceDeducted ? '#059669' : '#FFFFFF'}
+                      />
                     </View>
-                    <Switch
-                      value={isMaintenanceDeducted}
-                      onValueChange={(val) => {
-                        setIsMaintenanceDeducted(val);
-                        if (!val) setDeductionAmount('');
-                      }}
-                      trackColor={{ false: '#E2E8F0', true: '#A7F3D0' }}
-                      thumbColor={isMaintenanceDeducted ? '#059669' : '#FFFFFF'}
-                    />
-                  </View>
 
-                  {isMaintenanceDeducted && (
-                    <View style={styles.deductionInputArea}>
-                      <Text style={styles.inputLabel}>Maintenance Amount (₹)</Text>
-                      <View style={styles.currencyInputRow}>
-                        <Text style={styles.currencySymbol}>₹</Text>
-                        <TextInput
-                          style={styles.currencyInput}
-                          keyboardType="numeric"
-                          placeholder="e.g. 3500"
-                          value={deductionAmount}
-                          onChangeText={setDeductionAmount}
-                        />
+                    {isMaintenanceDeducted && (
+                      <View style={styles.deductionInputArea}>
+                        <Text style={styles.inputLabel}>Maintenance Amount to Deduct (₹)</Text>
+                        <View style={styles.currencyInputRow}>
+                          <Text style={styles.currencySymbol}>₹</Text>
+                          <TextInput
+                            style={styles.currencyInput}
+                            keyboardType="numeric"
+                            placeholder="e.g. 12000"
+                            value={deductionAmount}
+                            onChangeText={setDeductionAmount}
+                          />
+                        </View>
+
+                        {/* Live calculation banner */}
+                        <View style={styles.deductionEquationBox}>
+                          <Text style={styles.deductionEquationText}>
+                            Gross Rent ₹{numDeclaredRent.toLocaleString()} - Maint ₹{numDeduction.toLocaleString()} ={' '}
+                            <Text style={styles.deductionEquationHighlight}>
+                              Net Rent Payable: ₹{netDeclaredRent.toLocaleString()}
+                            </Text>
+                          </Text>
+                          <TouchableOpacity
+                            style={styles.useNetBtn}
+                            onPress={() => setAmountPaid(netDeclaredRent.toString())}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.useNetBtnText}>
+                              Set Payment to Net (₹{netDeclaredRent.toLocaleString()})
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                    </View>
-                  )}
-                </View>
+                    )}
+                  </View>
+                )}
               </View>
             ) : (
               /* Pay Only Notice */
@@ -953,6 +974,36 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
+  },
+  deductionEquationBox: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 8,
+  },
+  deductionEquationText: {
+    fontSize: 12,
+    color: '#92400E',
+    fontWeight: '600',
+  },
+  deductionEquationHighlight: {
+    fontWeight: '800',
+    color: '#B45309',
+  },
+  useNetBtn: {
+    marginTop: 8,
+    backgroundColor: '#059669',
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    alignSelf: 'flex-start',
+  },
+  useNetBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   payOnlyNotice: {
     flexDirection: 'row',

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,8 @@ import {
   Scale,
   AlertCircle,
   RefreshCw,
+  Calendar,
+  Check,
 } from 'lucide-react-native';
 import { useApp } from '../context/AppContext';
 import { Tenant } from '../types';
@@ -30,6 +32,7 @@ import { TenantCard } from '../components/tenants/TenantCard';
 import { MayReminderBanner } from '../components/alerts/MayReminderBanner';
 import { LogPaymentModal } from '../components/payments/LogPaymentModal';
 import { TenantOnboardingModal } from '../components/tenants/TenantOnboardingModal';
+import { MonthlyRentCollectionModal } from '../components/payments/MonthlyRentCollectionModal';
 import { calculatePropertyOverviewSummary } from '../utils/duesCalculator';
 
 interface DashboardScreenProps {
@@ -50,6 +53,32 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [activeFilter, setActiveFilter] = useState<'all' | 'flexible' | 'fixed' | 'variable'>('all');
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
   const [selectedTenantForPayment, setSelectedTenantForPayment] = useState<Tenant | null>(null);
+  const [isMonthlyCollectionOpen, setIsMonthlyCollectionOpen] = useState<boolean>(false);
+
+  const now = new Date();
+  const currentMonthYear = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  const isOctOrLater =
+    now.getFullYear() > 2026 || (now.getFullYear() === 2026 && now.getMonth() >= 9);
+  const targetCollectionMonth = isOctOrLater ? currentMonthYear : 'October 2026';
+
+  const activeTenants = useMemo(() => tenants.filter((t) => t.active), [tenants]);
+  const uncollectedTenants = useMemo(() => {
+    return activeTenants.filter((t) => {
+      const hasPayment = payments.some(
+        (p) =>
+          p.tenantId === t.id &&
+          p.monthYear.trim().toLowerCase() === targetCollectionMonth.trim().toLowerCase()
+      );
+      return !hasPayment;
+    });
+  }, [activeTenants, payments, targetCollectionMonth]);
+
+  // Auto-pop up when active month is October 2026 or later and there are pending collections
+  useEffect(() => {
+    if (isOctOrLater && uncollectedTenants.length > 0) {
+      setIsMonthlyCollectionOpen(true);
+    }
+  }, [isOctOrLater, targetCollectionMonth]);
 
   // Financial calculations across all properties
   const portfolio = useMemo(() => {
@@ -221,6 +250,56 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             )}
           </View>
         </View>
+
+        {/* Automated Monthly Rent Collection Banner (Oct 2026 onwards) */}
+        {activeTenants.length > 0 && (
+          <View style={styles.monthlyCollectionCard}>
+            <View style={styles.monthlyCollectionLeft}>
+              <View style={styles.calendarIconCircle}>
+                <Calendar size={18} color="#4F46E5" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={styles.monthlyBadgeRow}>
+                  <Text style={styles.monthlyCardMonth}>{targetCollectionMonth}</Text>
+                  {uncollectedTenants.length > 0 ? (
+                    <View style={styles.pendingBadge}>
+                      <Text style={styles.pendingBadgeText}>{uncollectedTenants.length} Pending</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.allCollectedBadge}>
+                      <Check size={11} color="#047857" />
+                      <Text style={styles.allCollectedBadgeText}>All Collected</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.monthlyCardTitle}>
+                  {uncollectedTenants.length > 0
+                    ? 'Monthly Rent Collection Due'
+                    : 'Monthly Rents Collected!'}
+                </Text>
+                <Text style={styles.monthlyCardSub}>
+                  {uncollectedTenants.length > 0
+                    ? `${uncollectedTenants.length} of ${activeTenants.length} properties awaiting payment entry`
+                    : `All ${activeTenants.length} active property rents recorded for ${targetCollectionMonth}`}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.monthlyCollectBtn,
+                uncollectedTenants.length === 0 && styles.monthlyCollectBtnSettled,
+              ]}
+              onPress={() => setIsMonthlyCollectionOpen(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.monthlyCollectBtnText}>
+                {uncollectedTenants.length > 0
+                  ? `Collect (${uncollectedTenants.length})`
+                  : 'View Month'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Landlord Financial Overview Cards */}
         <View style={styles.metricsContainer}>
@@ -424,6 +503,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           tenant={selectedTenantForPayment}
         />
       )}
+
+      <MonthlyRentCollectionModal
+        visible={isMonthlyCollectionOpen}
+        onClose={() => setIsMonthlyCollectionOpen(false)}
+        targetMonthYear={targetCollectionMonth}
+      />
     </View>
   );
 };
@@ -539,6 +624,103 @@ const styles = StyleSheet.create({
   updateCardBtnText: {
     fontSize: 11,
     fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  monthlyCollectionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12,
+    shadowColor: '#4338CA',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  monthlyCollectionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    paddingRight: 8,
+  },
+  calendarIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthlyBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  monthlyCardMonth: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#4F46E5',
+  },
+  pendingBadge: {
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  pendingBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#DC2626',
+  },
+  allCollectedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  allCollectedBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#047857',
+  },
+  monthlyCardTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  monthlyCardSub: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  monthlyCollectBtn: {
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  monthlyCollectBtnSettled: {
+    backgroundColor: '#059669',
+    shadowColor: '#059669',
+  },
+  monthlyCollectBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
     color: '#FFFFFF',
   },
   metricsContainer: {

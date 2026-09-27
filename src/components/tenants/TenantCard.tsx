@@ -9,6 +9,7 @@ import {
   Plus,
   Sparkles,
   Scale,
+  Calendar,
 } from 'lucide-react-native';
 import { Tenant } from '../../types';
 import { useApp } from '../../context/AppContext';
@@ -146,6 +147,16 @@ export const TenantCard: React.FC<TenantCardProps> = ({
             <Text style={[styles.tagText, styles.tagTextTeal]}>
               +{tenant.rentIncrement.value}
               {tenant.rentIncrement.type === 'percentage' ? '%' : '₹'}/yr
+            </Text>
+          </View>
+        )}
+
+        {/* Automated unbilled month tag */}
+        {summary.unbilledAutoMonths && summary.unbilledAutoMonths.length > 0 && (
+          <View style={[styles.tag, styles.tagAutoDue]}>
+            <Calendar size={12} color="#DC2626" />
+            <Text style={[styles.tagText, styles.tagTextAutoDue]}>
+              {summary.unbilledAutoMonths[0].monthYear} Due
             </Text>
           </View>
         )}
@@ -352,6 +363,15 @@ const styles = StyleSheet.create({
   },
   tagTextTeal: {
     color: '#0F766E',
+  },
+  tagAutoDue: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 0.5,
+    borderColor: '#FECACA',
+  },
+  tagTextAutoDue: {
+    color: '#DC2626',
+    fontWeight: '700',
   },
   actionRow: {
     flexDirection: 'row',
