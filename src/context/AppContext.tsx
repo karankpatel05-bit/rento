@@ -9,6 +9,7 @@ import {
 } from '../types';
 import { StorageService } from '../services/storage';
 import { NotificationService } from '../services/notifications';
+import { calculateTenantRentSummary } from '../utils/duesCalculator';
 
 interface AppContextType {
   tenants: Tenant[];
@@ -98,7 +99,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     loadAll();
-    NotificationService.requestPermissionsAsync();
+    NotificationService.requestPermissionsAsync().then((granted) => {
+      if (granted) {
+        NotificationService.scheduleMonthly1stRentCollection();
+      }
+    });
   }, []);
 
   // Auto-lock when returning from background

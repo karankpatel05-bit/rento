@@ -28,6 +28,8 @@ import {
   Scale,
   RefreshCw,
   ArrowDown,
+  MessageSquare,
+  IndianRupee,
 } from 'lucide-react-native';
 import { Tenant, PaymentRecord, InterestCollectionRecord } from '../types';
 import { useApp } from '../context/AppContext';
@@ -37,6 +39,7 @@ import { LogAdditionalDepositModal } from '../components/tenants/LogAdditionalDe
 import { LogPastRentModal } from '../components/payments/LogPastRentModal';
 import { PdfGenerator } from '../services/pdfGenerator';
 import { calculateTenantRentSummary } from '../utils/duesCalculator';
+import { NotificationService } from '../services/notifications';
 
 interface TenantDetailScreenProps {
   tenant: Tenant;
@@ -103,6 +106,21 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
     Alert.alert(
       'Push Notification Triggered!',
       `Sent local reminder: "Collect electricity deposit interest from ${activeTenant.name}."`
+    );
+  };
+
+  const handleSendWhatsAppReminder = () => {
+    const unbilledMonthsStr =
+      rentSummary.unbilledAutoMonths && rentSummary.unbilledAutoMonths.length > 0
+        ? rentSummary.unbilledAutoMonths.map((m) => m.monthYear).join(', ')
+        : undefined;
+
+    NotificationService.sendTenantWhatsAppReminder(
+      activeTenant.phone,
+      activeTenant.name,
+      activeTenant.unitDesignation,
+      rentSummary.dueAmount,
+      unbilledMonthsStr
     );
   };
 
@@ -398,6 +416,64 @@ export const TenantDetailScreen: React.FC<TenantDetailScreenProps> = ({
             </Text>
           </View>
         </View>
+
+        {/* Rent To Be Collected Box (When rent is unpaid/due) */}
+        {rentSummary.dueAmount > 0 && (
+          <View style={styles.rentToBeCollectedCard}>
+            <View style={styles.toBeCollectedTop}>
+              <View style={styles.toBeCollectedIconWrap}>
+                <AlertCircle size={20} color="#DC2626" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.toBeCollectedTitle}>Rent To Be Collected</Text>
+                <Text style={styles.toBeCollectedAmount}>
+                  ₹{rentSummary.dueAmount.toLocaleString()}
+                </Text>
+              </View>
+              <View style={styles.toBeCollectedBadge}>
+                <Text style={styles.toBeCollectedBadgeText}>Payment Pending</Text>
+              </View>
+            </View>
+
+            {rentSummary.unbilledAutoMonths && rentSummary.unbilledAutoMonths.length > 0 && (
+              <View style={styles.unbilledList}>
+                <Text style={styles.unbilledListHeader}>Auto-Accrued Months Pending:</Text>
+                {rentSummary.unbilledAutoMonths.map((m, idx) => (
+                  <View key={idx} style={styles.unbilledItem}>
+                    <View style={styles.unbilledItemLeft}>
+                      <Calendar size={13} color="#DC2626" />
+                      <Text style={styles.unbilledMonthText}>{m.monthYear}</Text>
+                    </View>
+                    <Text style={styles.unbilledAmountText}>₹{m.expectedRent.toLocaleString()}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Action Buttons: Collect Now & Send WhatsApp Reminder */}
+            <View style={styles.toBeCollectedActions}>
+              <TouchableOpacity
+                style={styles.collectNowBtn}
+                onPress={() => setIsLogPaymentOpen(true)}
+                activeOpacity={0.8}
+              >
+                <IndianRupee size={14} color="#FFFFFF" />
+                <Text style={styles.collectNowBtnText}>Collect Now</Text>
+              </TouchableOpacity>
+
+              {activeTenant.phone ? (
+                <TouchableOpacity
+                  style={styles.whatsAppReminderBtn}
+                  onPress={handleSendWhatsAppReminder}
+                  activeOpacity={0.8}
+                >
+                  <MessageSquare size={14} color="#047857" />
+                  <Text style={styles.whatsAppReminderBtnText}>Send WhatsApp</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+        )}
 
         {/* Tenant Security Deposit Held Card */}
         <View style={styles.depositCard}>
@@ -1730,6 +1806,125 @@ const styles = StyleSheet.create({
   quickFlexPayText: {
     fontSize: 12,
     fontWeight: '700',
+    color: '#047857',
+  },
+  rentToBeCollectedCard: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+  },
+  toBeCollectedTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  toBeCollectedIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toBeCollectedTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#991B1B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  toBeCollectedAmount: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#DC2626',
+  },
+  toBeCollectedBadge: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  toBeCollectedBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#DC2626',
+  },
+  unbilledList: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+    gap: 6,
+  },
+  unbilledListHeader: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#991B1B',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  unbilledItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  unbilledItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  unbilledMonthText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  unbilledAmountText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#DC2626',
+  },
+  toBeCollectedActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  collectNowBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: '#DC2626',
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+  },
+  collectNowBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  whatsAppReminderBtn: {
+    flex: 1.2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+  },
+  whatsAppReminderBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
     color: '#047857',
   },
 });

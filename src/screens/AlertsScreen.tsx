@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,21 +14,51 @@ import {
   Bell,
   ArrowRight,
   ShieldAlert,
+  AlertCircle,
+  Calendar,
+  IndianRupee,
+  MessageSquare,
 } from 'lucide-react-native';
 import { useApp } from '../context/AppContext';
 import { Tenant } from '../types';
 import { LogInterestModal } from '../components/tenants/LogInterestModal';
+import { LogPaymentModal } from '../components/payments/LogPaymentModal';
+import { calculateTenantRentSummary } from '../utils/duesCalculator';
+import { NotificationService } from '../services/notifications';
 
 interface AlertsScreenProps {
   onSelectTenant: (tenant: Tenant) => void;
 }
 
 export const AlertsScreen: React.FC<AlertsScreenProps> = ({ onSelectTenant }) => {
-  const { alerts, tenants, triggerTestMayNotification } = useApp();
+  const { alerts, tenants, payments, triggerTestMayNotification } = useApp();
   const [selectedTenantForRebate, setSelectedTenantForRebate] = useState<Tenant | null>(null);
+  const [selectedTenantForPayment, setSelectedTenantForPayment] = useState<Tenant | null>(null);
+
+  // Compute overdue tenants
+  const overdueTenants = useMemo(() => {
+    return tenants
+      .filter((t) => t.active)
+      .map((tenant) => {
+        const summary = calculateTenantRentSummary(tenant, payments);
+        return {
+          tenant,
+          summary,
+        };
+      })
+      .filter((item) => item.summary.dueAmount > 0);
+  }, [tenants, payments]);
 
   const pendingAlerts = alerts.filter((a) => !a.isResolved);
   const resolvedAlerts = alerts.filter((a) => a.isResolved);
+
+  const handleTestOverdueNotification = async (tenant: Tenant, dueAmount: number, monthStr: string) => {
+    await NotificationService.triggerOverdueRentNotification(tenant, monthStr, dueAmount, true);
+    Alert.alert(
+      'Overdue Notification Dispatched',
+      `Sent push notification: "Rent Overdue: ${tenant.name} (${tenant.unitDesignation}) - ₹${dueAmount.toLocaleString()}"`
+    );
+  };
 
   const handleTestNotification = async (tenant: Tenant) => {
     await triggerTestMayNotification(tenant);
@@ -40,6 +70,102 @@ export const AlertsScreen: React.FC<AlertsScreenProps> = ({ onSelectTenant }) =>
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Overdue Rent Reminders Section */}
+      <View style={styles.overdueSection}>
+        <View style={styles.sectionHeader}>
+          <AlertCircle size={18} color="#DC2626" />
+          <Text style={styles.overdueSectionTitle}>
+            Overdue Rent Collections ({overdueTenants.length})
+          </Text>
+        </View>
+
+        {overdueTenants.length === 0 ? (
+          <View style={styles.noOverdueCard}>
+            <CheckCircle2 size={22} color="#059669" />
+            <Text style={styles.noOverdueText}>All property rents are up to date!</Text>
+          </View>
+        ) : (
+          overdueTenants.map(({ tenant, summary }) => {
+            const unbilledMonths = summary.unbilledAutoMonths || [];
+            const monthsStr =
+              unbilledMonths.length > 0
+                ? unbilledMonths.map((m) => m.monthYear).join(', ')
+                : 'Current period';
+
+            return (
+              <View key={tenant.id} style={styles.overdueCard}>
+                <View style={styles.overdueCardTop}>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.overdueBadgeRow}>
+                      <View style={styles.overdueUnitBadge}>
+                        <Text style={styles.overdueUnitText}>{tenant.unitDesignation}</Text>
+                      </View>
+                      <Text style={styles.overdueTenantName}>{tenant.name}</Text>
+                    </View>
+                    <Text style={styles.overdueAddress}>{tenant.propertyAddress}</Text>
+                  </View>
+
+                  <View style={styles.overdueAmountBox}>
+                    <Text style={styles.overdueAmountLabel}>Due to Collect</Text>
+                    <Text style={styles.overdueAmount}>
+                      ₹{summary.dueAmount.toLocaleString()}
+                    </Text>
+                  </View>
+                </View>
+
+                {unbilledMonths.length > 0 && (
+                  <View style={styles.overdueMonthStrip}>
+                    <Calendar size={12} color="#DC2626" />
+                    <Text style={styles.overdueMonthText}>Pending for: {monthsStr}</Text>
+                  </View>
+                )}
+
+                {/* Quick Action Buttons */}
+                <View style={styles.overdueActionRow}>
+                  <TouchableOpacity
+                    style={styles.overdueCollectBtn}
+                    onPress={() => setSelectedTenantForPayment(tenant)}
+                    activeOpacity={0.8}
+                  >
+                    <IndianRupee size={13} color="#FFFFFF" />
+                    <Text style={styles.overdueCollectBtnText}>Collect Rent</Text>
+                  </TouchableOpacity>
+
+                  {tenant.phone ? (
+                    <TouchableOpacity
+                      style={styles.overdueWhatsAppBtn}
+                      onPress={() =>
+                        NotificationService.sendTenantWhatsAppReminder(
+                          tenant.phone,
+                          tenant.name,
+                          tenant.unitDesignation,
+                          summary.dueAmount,
+                          monthsStr
+                        )
+                      }
+                      activeOpacity={0.8}
+                    >
+                      <MessageSquare size={13} color="#047857" />
+                      <Text style={styles.overdueWhatsAppBtnText}>Send WhatsApp</Text>
+                    </TouchableOpacity>
+                  ) : null}
+
+                  <TouchableOpacity
+                    style={styles.overdueBellBtn}
+                    onPress={() =>
+                      handleTestOverdueNotification(tenant, summary.dueAmount, monthsStr)
+                    }
+                    activeOpacity={0.7}
+                  >
+                    <Bell size={13} color="#64748B" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })
+        )}
+      </View>
+
       {/* Intro Banner */}
       <View style={styles.banner}>
         <View style={styles.bannerIcon}>
@@ -177,6 +303,15 @@ export const AlertsScreen: React.FC<AlertsScreenProps> = ({ onSelectTenant }) =>
           tenant={selectedTenantForRebate}
         />
       )}
+
+      {/* Modal to log overdue rent payment */}
+      {selectedTenantForPayment && (
+        <LogPaymentModal
+          visible={!!selectedTenantForPayment}
+          onClose={() => setSelectedTenantForPayment(null)}
+          tenant={selectedTenantForPayment}
+        />
+      )}
     </ScrollView>
   );
 };
@@ -186,6 +321,152 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
     padding: 16,
+  },
+  overdueSection: {
+    marginBottom: 20,
+  },
+  overdueSectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#991B1B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  noOverdueCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 12,
+    padding: 12,
+  },
+  noOverdueText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#047857',
+  },
+  overdueCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  overdueCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  overdueBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  overdueUnitBadge: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  overdueUnitText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#DC2626',
+  },
+  overdueTenantName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  overdueAddress: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  overdueAmountBox: {
+    alignItems: 'flex-end',
+  },
+  overdueAmountLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#991B1B',
+    textTransform: 'uppercase',
+  },
+  overdueAmount: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#DC2626',
+  },
+  overdueMonthStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginBottom: 10,
+  },
+  overdueMonthText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#B91C1C',
+  },
+  overdueActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  overdueCollectBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: '#DC2626',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  overdueCollectBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  overdueWhatsAppBtn: {
+    flex: 1.2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  overdueWhatsAppBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#047857',
+  },
+  overdueBellBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   banner: {
     backgroundColor: '#FEF3C7',
